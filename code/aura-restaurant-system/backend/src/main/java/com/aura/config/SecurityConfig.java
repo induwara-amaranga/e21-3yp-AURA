@@ -38,7 +38,10 @@ public class SecurityConfig {
             "/api/auth/login",
             "/api/auth/register",
             "/api/auth/hash", //temporary endpoint for generating password hashes during development
-            "/api/menu/**",       // customers browse menu without login
+            "/api/menu/**",   // customers browse menu without login
+            "/api/tables/**",
+            "/api/orders/**",
+            "/api/reservations/**",
             "/swagger-ui/**",
             "/swagger-ui.html",
             "/v3/api-docs/**"
@@ -57,9 +60,9 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                 // Kitchen role — update order status only
-                .requestMatchers("/api/orders/*/status").hasAnyRole("KITCHEN", "ADMIN")
+                //.requestMatchers("/api/orders/*/status").hasAnyRole("KITCHEN", "ADMIN")
                 // Staff role — payments and table management
-                .requestMatchers("/api/payments/**", "/api/tables/**").hasAnyRole("STAFF", "ADMIN")
+                //.requestMatchers("/api/payments/**", "/api/tables/**").hasAnyRole("STAFF", "ADMIN")
                 // Admin only
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 // Everything else requires a valid JWT
