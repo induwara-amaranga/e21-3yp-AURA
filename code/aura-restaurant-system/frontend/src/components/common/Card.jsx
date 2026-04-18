@@ -1,3 +1,7 @@
+/**
+ * Shared glass card container for dashboard tiles and grouped content blocks.
+ */
+
 function Card({ children, className = '', hover = true, glow = false, onClick }) {
     return (
         <div

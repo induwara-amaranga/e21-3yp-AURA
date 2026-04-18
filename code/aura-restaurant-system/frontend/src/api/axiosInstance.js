@@ -1,3 +1,19 @@
+/**
+ * ============================================================
+ *  AURA API Client
+ * ============================================================
+ *  Centralized Axios instance used by frontend API calls.
+ *
+ *  [API ENDPOINT]: GET/POST/PATCH/DELETE /api/v1/*
+ *  [DATA SYNC]: Keep all request base config/interceptors here
+ *  so every feature (menu, orders, users, ratings, payments)
+ *  behaves consistently.
+ *
+ *  [BACKEND INTEGRATION: TODO]
+ *  Add auth token request interceptor and 401 refresh logic.
+ * ============================================================
+ */
+
 import axios from 'axios';
 
 const axiosInstance = axios.create({

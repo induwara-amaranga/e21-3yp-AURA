@@ -1,3 +1,7 @@
+/**
+ * Reusable button with variant/size presets used across Robot, Kitchen, and Admin pages.
+ */
+
 import { forwardRef } from 'react';
 
 const variants = {

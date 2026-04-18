@@ -1,3 +1,7 @@
+/**
+ * Shared text input with optional icon and inline validation state.
+ */
+
 import { forwardRef } from 'react';
 
 const Input = forwardRef(({ label, error, className = '', icon: Icon, ...props }, ref) => {

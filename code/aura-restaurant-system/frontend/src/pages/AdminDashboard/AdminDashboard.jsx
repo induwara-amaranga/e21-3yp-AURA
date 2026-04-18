@@ -1,227 +1,506 @@
+/**
+ * ============================================================
+ *  AURA Restaurant System — Admin Dashboard
+ * ============================================================
+ *  Two tabs:
+ *    1. Overview  — stats, recent orders, robot fleet
+ *    2. Manage Menu — add / delete menu items (syncs to RobotUI)
+ *
+ *  BACKEND INTEGRATION POINTS are marked with [TODO] comments.
+ * ============================================================
+ */
+
+import { useState } from 'react';
 import {
-    TrendingUp,
-    DollarSign,
-    ShoppingBag,
-    Bot,
-    Clock,
-    ArrowUpRight,
-    ArrowDownRight,
-    Users,
-    Zap,
-    Activity,
+  LayoutDashboard, UtensilsCrossed, DollarSign, ShoppingBag,
+  Bot, ArrowUpRight, ArrowDownRight, Plus,
+  Trash2, Activity, LogOut, Save, X,
 } from 'lucide-react';
 import Card from '../../components/common/Card';
 import StatusBadge from '../../components/common/StatusBadge';
 import Sidebar from '../../components/layout/Sidebar';
 import Footer from '../../components/layout/Footer';
-import { useOrders } from '../../hooks/useOrders';
-import { formatPrice, formatTime, getStatusColor } from '../../utils/helpers';
+import { formatPrice } from '../../utils/helpers';
+import { useAppContext } from '../../context/AppContext';
+import { useRestaurant } from '../../context/RestaurantContext';
 
-// ── Mock Stats ──
-const robotsData = [
-    { id: 'AURA-01', status: 'delivering', battery: 87, deliveries: 24 },
-    { id: 'AURA-02', status: 'idle', battery: 95, deliveries: 18 },
-    { id: 'AURA-03', status: 'charging', battery: 32, deliveries: 21 },
-    { id: 'AURA-04', status: 'delivering', battery: 64, deliveries: 16 },
+// ── Mock robot fleet data ─────────────────────────────────────────────────────
+// [BACKEND INTEGRATION: TODO] - GET /api/robots/status
+// Description: Fetch real-time robot status from backend (battery, state, active deliveries).
+//   Consider polling every 10 s or using WebSocket for live updates.
+// ─────────────────────────────────────────────────────────────────────────────
+const ROBOTS_DATA = [
+  { id: 'AURA-01', status: 'delivering', battery: 87, deliveries: 24 },
+  { id: 'AURA-02', status: 'idle',       battery: 95, deliveries: 18 },
+  { id: 'AURA-03', status: 'charging',   battery: 32, deliveries: 21 },
+  { id: 'AURA-04', status: 'delivering', battery: 64, deliveries: 16 },
 ];
 
-function AdminDashboard() {
-    const { orders, activeOrders, completedOrders, totalRevenue } = useOrders();
+// ── Category choices for menu form ───────────────────────────────────────────
+const MENU_CATEGORIES = [
+  { value: 'popular',  label: 'Popular'  },
+  { value: 'mains',    label: 'Mains'    },
+  { value: 'healthy',  label: 'Healthy'  },
+  { value: 'desserts', label: 'Desserts' },
+  { value: 'drinks',   label: 'Drinks'   },
+];
 
-    const stats = [
-        {
-            label: 'Total Revenue',
-            value: formatPrice(totalRevenue || 4285.5),
-            change: '+12.5%',
-            up: true,
-            icon: DollarSign,
-            color: 'from-emerald-500 to-green-400',
-        },
-        {
-            label: 'Active Orders',
-            value: activeOrders.length || 8,
-            change: '+3',
-            up: true,
-            icon: ShoppingBag,
-            color: 'from-aura-500 to-aura-400',
-        },
-        {
-            label: 'Robots Active',
-            value: `${robotsData.filter((r) => r.status !== 'charging').length}/${robotsData.length}`,
-            change: 'Online',
-            up: true,
-            icon: Bot,
-            color: 'from-neon-cyan to-blue-400',
-        },
-        {
-            label: 'Avg. Delivery',
-            value: '4.2 min',
-            change: '-0.8 min',
-            up: true,
-            icon: Clock,
-            color: 'from-amber-500 to-yellow-400',
-        },
-    ];
+const COMMON_EMOJIS = ['🍔','🍕','🍣','🦞','🍖','🍝','🥗','🍫','🍰','🍵','🥭','🍋','🥑','🍮','🍗','🥩','🌮','🍜'];
 
-    const recentOrders = orders.length > 0 ? orders.slice(0, 6) : [
-        { id: 'ORD-DEMO-001', tableNumber: 'T3', status: 'preparing', totalAmount: 67.50, createdAt: new Date().toISOString(), items: [{ name: 'Truffle Burger', quantity: 2 }] },
-        { id: 'ORD-DEMO-002', tableNumber: 'T1', status: 'new', totalAmount: 34.50, createdAt: new Date().toISOString(), items: [{ name: 'Lobster Risotto', quantity: 1 }] },
-        { id: 'ORD-DEMO-003', tableNumber: 'T5', status: 'ready', totalAmount: 45.00, createdAt: new Date().toISOString(), items: [{ name: 'Dragon Roll', quantity: 2 }] },
-        { id: 'ORD-DEMO-004', tableNumber: 'T2', status: 'completed', totalAmount: 89.00, createdAt: new Date().toISOString(), items: [{ name: 'Wagyu Steak', quantity: 1 }] },
-    ];
+// ─────────────────────────────────────────────────────────────────────────────
+export default function AdminDashboard() {
+  const { logout, menuItems, addMenuItem, deleteMenuItem } = useAppContext();
+  const {
+    activeOrders,
+    orderHistory,
+    getConfirmedRevenue,
+    getPendingOrderTotal,
+  } = useRestaurant();
 
-    return (
-        <div className="flex min-h-[calc(100vh-4rem)]">
-            <Sidebar />
+  // [API ENDPOINT]: GET /api/v1/admin/revenue?status=PAID
+  // [DATA SYNC]: Revenue is derived only from paid tickets so kitchen placements never inflate earnings.
+  const confirmedRevenue = getConfirmedRevenue();
 
-            <div className="flex-1 flex flex-col">
-                <div className="flex-1 p-6 lg:p-8 space-y-8">
-                    {/* ── Header ── */}
-                    <div>
-                        <h1 className="font-display text-3xl font-bold text-white flex items-center gap-3">
-                            <Activity className="text-aura-400" size={28} />
-                            Admin Dashboard
-                        </h1>
-                        <p className="text-dark-300 mt-1">Real-time overview of your restaurant operations</p>
-                    </div>
+  // [API ENDPOINT]: GET /api/v1/admin/stats
+  // [DATA SYNC]: Pending total tracks kitchen-sent but unpaid orders for accurate outstanding exposure.
+  const pendingOrderTotal = getPendingOrderTotal();
 
-                    {/* ── Stats Grid ── */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        {stats.map((stat) => {
-                            const Icon = stat.icon;
-                            return (
-                                <Card key={stat.label} hover={false} className="relative overflow-hidden">
-                                    <div className="flex items-start justify-between">
-                                        <div>
-                                            <p className="text-xs font-medium text-dark-400 uppercase tracking-wider">
-                                                {stat.label}
-                                            </p>
-                                            <p className="text-3xl font-bold text-white mt-2 font-display">{stat.value}</p>
-                                            <div className="flex items-center gap-1 mt-2">
-                                                {stat.up ? (
-                                                    <ArrowUpRight size={14} className="text-neon-green" />
-                                                ) : (
-                                                    <ArrowDownRight size={14} className="text-red-400" />
-                                                )}
-                                                <span
-                                                    className={`text-xs font-medium ${stat.up ? 'text-neon-green' : 'text-red-400'
-                                                        }`}
-                                                >
-                                                    {stat.change}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <div
-                                            className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${stat.color} flex items-center justify-center shadow-lg`}
-                                        >
-                                            <Icon size={22} className="text-white" />
-                                        </div>
-                                    </div>
-                                    {/* Decorative gradient */}
-                                    <div
-                                        className={`absolute -bottom-6 -right-6 w-24 h-24 rounded-full bg-gradient-to-br ${stat.color} opacity-5 blur-xl`}
-                                    />
-                                </Card>
-                            );
-                        })}
-                    </div>
+  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'menu'
 
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        {/* ── Recent Orders ── */}
-                        <div className="lg:col-span-2">
-                            <Card hover={false} className="p-0 overflow-hidden">
-                                <div className="px-6 py-4 border-b border-dark-700/50 flex items-center justify-between">
-                                    <h2 className="font-display text-lg font-bold text-white flex items-center gap-2">
-                                        <ShoppingBag size={18} className="text-aura-400" />
-                                        Recent Orders
-                                    </h2>
-                                    <span className="text-xs text-dark-400">{recentOrders.length} orders</span>
-                                </div>
-                                <div className="divide-y divide-dark-700/30">
-                                    {recentOrders.map((order) => (
-                                        <div
-                                            key={order.id}
-                                            className="px-6 py-4 flex items-center gap-4 hover:bg-dark-800/30 transition-colors"
-                                        >
-                                            <div className="w-10 h-10 rounded-xl bg-dark-700 flex items-center justify-center text-sm font-bold text-aura-300">
-                                                {order.tableNumber}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-medium text-white truncate">{order.id}</p>
-                                                <p className="text-xs text-dark-400 truncate">
-                                                    {order.items.map((i) => `${i.quantity}x ${i.name}`).join(', ')}
-                                                </p>
-                                            </div>
-                                            <StatusBadge status={order.status} />
-                                            <span className="text-sm font-bold text-white ml-4">
-                                                {formatPrice(order.totalAmount)}
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </Card>
-                        </div>
+  // ── Manage Menu form state ────────────────────────────────────────────────
+  const [form, setForm] = useState({
+    name: '', price: '', category: 'popular', emoji: '🍔', time: '15 min',
+  });
+  const [formError, setFormError]   = useState('');
+  const [formSuccess, setFormSuccess] = useState('');
 
-                        {/* ── Robot Status ── */}
-                        <div>
-                            <Card hover={false} className="p-0 overflow-hidden">
-                                <div className="px-6 py-4 border-b border-dark-700/50">
-                                    <h2 className="font-display text-lg font-bold text-white flex items-center gap-2">
-                                        <Bot size={18} className="text-neon-cyan" />
-                                        Robot Fleet
-                                    </h2>
-                                </div>
-                                <div className="p-4 space-y-3">
-                                    {robotsData.map((robot) => (
-                                        <div
-                                            key={robot.id}
-                                            className="glass-light rounded-xl p-4 hover:neon-border transition-all duration-300"
-                                        >
-                                            <div className="flex items-center justify-between mb-2">
-                                                <span className="font-bold text-white text-sm">{robot.id}</span>
-                                                <span
-                                                    className={`text-xs font-medium px-2 py-0.5 rounded-full ${robot.status === 'delivering'
-                                                            ? 'bg-neon-green/10 text-neon-green'
-                                                            : robot.status === 'idle'
-                                                                ? 'bg-aura-500/10 text-aura-300'
-                                                                : 'bg-amber-500/10 text-amber-400'
-                                                        }`}
-                                                >
-                                                    {robot.status}
-                                                </span>
-                                            </div>
-                                            {/* Battery Bar */}
-                                            <div className="flex items-center gap-2">
-                                                <div className="flex-1 h-1.5 bg-dark-700 rounded-full overflow-hidden">
-                                                    <div
-                                                        className={`h-full rounded-full transition-all duration-500 ${robot.battery > 60
-                                                                ? 'bg-neon-green'
-                                                                : robot.battery > 30
-                                                                    ? 'bg-amber-400'
-                                                                    : 'bg-red-400'
-                                                            }`}
-                                                        style={{ width: `${robot.battery}%` }}
-                                                    />
-                                                </div>
-                                                <span className="text-xs text-dark-400 w-10 text-right">
-                                                    {robot.battery}%
-                                                </span>
-                                            </div>
-                                            <p className="text-xs text-dark-400 mt-2">
-                                                {robot.deliveries} deliveries today
-                                            </p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </Card>
-                        </div>
-                    </div>
-                </div>
+  // ── Stats for overview ────────────────────────────────────────────────────
+  // [BACKEND INTEGRATION: TODO] - GET /api/analytics
+  // Description: Replace these computed values with data returned by the analytics endpoint.
+  //   Expected fields: { totalRevenue, ordersToday, avgDeliveryTime, activeRobots }
+  const stats = [
+    {
+      label: 'Confirmed Revenue',
+      value: formatPrice(confirmedRevenue),
+      change: 'Paid only', up: true, icon: DollarSign, color: 'from-emerald-500 to-green-400',
+    },
+    {
+      label: 'Active Orders',
+      value: activeOrders.length,
+      change: 'Live', up: true, icon: ShoppingBag, color: 'from-aura-500 to-aura-400',
+    },
+    {
+      label: 'Pending Order Total',
+      value: formatPrice(pendingOrderTotal),
+      change: 'Unpaid', up: true, icon: ShoppingBag, color: 'from-cyan-500 to-blue-400',
+    },
+    {
+      label: 'Robots Active',
+      value: `${ROBOTS_DATA.filter((r) => r.status !== 'charging').length}/${ROBOTS_DATA.length}`,
+      change: 'Online', up: true, icon: Bot, color: 'from-amber-500 to-yellow-400',
+    },
+  ];
 
-                <Footer />
-            </div>
+  const recentOrders = [...orderHistory].slice(-6).reverse();
+
+  // [API ENDPOINT]: POST /api/v1/menu
+  // [DATA SYNC]: Adds menu entries into shared context so Robot and Admin views render the same catalog immediately.
+  const handleAddItem = (e) => {
+    e.preventDefault();
+    setFormError('');
+    setFormSuccess('');
+
+    if (!form.name.trim()) return setFormError('Item name is required.');
+    const price = parseFloat(form.price);
+    if (isNaN(price) || price <= 0) return setFormError('Enter a valid price greater than 0.');
+
+    addMenuItem({ ...form, price });
+    setFormSuccess(`"${form.name}" added to the menu! It's now visible on RobotUI.`);
+    setForm({ name: '', price: '', category: 'popular', emoji: '🍔', time: '15 min' });
+    setTimeout(() => setFormSuccess(''), 4000);
+  };
+
+  // [API ENDPOINT]: DELETE /api/v1/menu/:id
+  // [DATA SYNC]: Removes menu rows from shared context so ordering screens cannot use deleted items.
+  const handleDeleteItem = (itemId, itemName) => {
+    if (!window.confirm(`Remove "${itemName}" from the menu?`)) return;
+    deleteMenuItem(itemId);
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
+  return (
+    <div className="flex min-h-[calc(100vh-4rem)]">
+      <Sidebar />
+
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* ── Page header ── */}
+        <div className="flex items-center justify-between px-6 lg:px-8 pt-8 pb-4">
+          <div>
+            <h1 className="font-display text-3xl font-bold text-white flex items-center gap-3">
+              <Activity className="text-aura-400" size={28} />
+              Admin Dashboard
+            </h1>
+            <p className="text-dark-400 mt-1 text-sm">
+              Restaurant operations overview and management
+            </p>
+          </div>
+          <button
+            id="admin-logout-btn"
+            onClick={logout}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl
+                       bg-white/5 hover:bg-white/10 text-dark-300 hover:text-white
+                       text-sm transition-all active:scale-95"
+          >
+            <LogOut size={15} />
+            Logout
+          </button>
         </div>
-    );
-}
 
-export default AdminDashboard;
+        {/* ── Tab Bar ── */}
+        <div className="px-6 lg:px-8 flex gap-2 mb-6 border-b border-dark-700/50 pb-4">
+          {[
+            { id: 'overview', label: 'Overview',    icon: LayoutDashboard  },
+            { id: 'menu',     label: 'Manage Menu', icon: UtensilsCrossed  },
+          ].map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              id={`admin-tab-${id}`}
+              onClick={() => setActiveTab(id)}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold
+                          transition-all duration-200
+                          ${activeTab === id
+                            ? 'bg-aura-600/20 text-aura-300 border border-aura-500/30'
+                            : 'text-dark-400 hover:text-white hover:bg-white/5'}`}
+            >
+              <Icon size={16} />
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* ══════════════════════ TAB: OVERVIEW ══════════════════════ */}
+        {activeTab === 'overview' && (
+          <div className="flex-1 px-6 lg:px-8 space-y-8 pb-8">
+
+            {/* Stat cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {stats.map((stat) => {
+                const Icon = stat.icon;
+                return (
+                  <Card key={stat.label} hover={false} className="relative overflow-hidden">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-xs font-medium text-dark-400 uppercase tracking-wider">
+                          {stat.label}
+                        </p>
+                        <p className="text-3xl font-bold text-white mt-2 font-display">
+                          {stat.value}
+                        </p>
+                        <div className="flex items-center gap-1 mt-2">
+                          {stat.up
+                            ? <ArrowUpRight size={14} className="text-emerald-400" />
+                            : <ArrowDownRight size={14} className="text-red-400" />}
+                          <span className={`text-xs font-medium ${stat.up ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {stat.change}
+                          </span>
+                        </div>
+                      </div>
+                      <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${stat.color}
+                                      flex items-center justify-center shadow-lg`}>
+                        <Icon size={22} className="text-white" />
+                      </div>
+                    </div>
+                    <div className={`absolute -bottom-6 -right-6 w-24 h-24 rounded-full
+                                    bg-gradient-to-br ${stat.color} opacity-5 blur-xl`} />
+                  </Card>
+                );
+              })}
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Recent Orders */}
+              <div className="lg:col-span-2">
+                <Card hover={false} className="p-0 overflow-hidden">
+                  <div className="px-6 py-4 border-b border-dark-700/50 flex items-center justify-between">
+                    <h2 className="font-display text-lg font-bold text-white flex items-center gap-2">
+                      <ShoppingBag size={18} className="text-aura-400" />
+                      Recent Orders
+                    </h2>
+                    <span className="text-xs text-dark-500">{recentOrders.length} orders</span>
+                  </div>
+                  <div className="divide-y divide-dark-700/20">
+                    {recentOrders.length === 0 ? (
+                      <div className="px-6 py-10 text-center text-sm text-dark-500">
+                        No orders recorded yet.
+                      </div>
+                    ) : (
+                      recentOrders.map((order) => (
+                        <div key={order.id}
+                             className="px-6 py-4 flex items-center gap-4 hover:bg-dark-800/30 transition-colors">
+                          <div className="w-10 h-10 rounded-xl bg-dark-700 flex items-center justify-center text-sm font-bold text-aura-300">
+                            {order.tableNumber}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-white truncate">{order.id}</p>
+                            <p className="text-xs text-dark-500 truncate">
+                              {order.items.map((i) => `${i.quantity}× ${i.name}`).join(', ')}
+                            </p>
+                          </div>
+                          <StatusBadge status={order.status} />
+                          <span className="text-sm font-bold text-white ml-2">
+                            {formatPrice(order.total)}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </Card>
+              </div>
+
+              {/* Robot Fleet */}
+              <div>
+                <Card hover={false} className="p-0 overflow-hidden">
+                  <div className="px-6 py-4 border-b border-dark-700/50">
+                    <h2 className="font-display text-lg font-bold text-white flex items-center gap-2">
+                      <Bot size={18} className="text-cyan-400" />
+                      Robot Fleet
+                    </h2>
+                  </div>
+                  <div className="p-4 space-y-3">
+                    {ROBOTS_DATA.map((robot) => (
+                      <div key={robot.id}
+                           className="glass-light rounded-xl p-4 hover:neon-border transition-all duration-300">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-bold text-white text-sm">{robot.id}</span>
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full
+                            ${robot.status === 'delivering' ? 'bg-emerald-500/10 text-emerald-400'
+                             : robot.status === 'idle'      ? 'bg-aura-500/10 text-aura-300'
+                                                            : 'bg-amber-500/10 text-amber-400'}`}>
+                            {robot.status}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full transition-all duration-500
+                              ${robot.battery > 60 ? 'bg-emerald-400'
+                               : robot.battery > 30 ? 'bg-amber-400' : 'bg-red-400'}`}
+                                 style={{ width: `${robot.battery}%` }} />
+                          </div>
+                          <span className="text-xs text-dark-500 w-10 text-right">
+                            {robot.battery}%
+                          </span>
+                        </div>
+                        <p className="text-xs text-dark-500 mt-1.5">{robot.deliveries} deliveries today</p>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════ TAB: MANAGE MENU ══════════════════════ */}
+        {activeTab === 'menu' && (
+          <div className="flex-1 px-6 lg:px-8 pb-8 grid grid-cols-1 lg:grid-cols-5 gap-8">
+
+            {/* ── Add New Item Form (left col) ── */}
+            <div className="lg:col-span-2">
+              <div className="glass rounded-2xl p-6 sticky top-24">
+                <h2 className="font-display text-xl font-bold text-white mb-1 flex items-center gap-2">
+                  <Plus size={20} className="text-aura-400" />
+                  Add Menu Item
+                </h2>
+                <p className="text-dark-400 text-xs mb-6">
+                  New items appear on the Robot UI immediately.
+                </p>
+
+                {/* [BACKEND INTEGRATION: TODO] - POST /api/menu
+                    On submit, call axiosInstance.post('/menu', formData) */}
+                <form onSubmit={handleAddItem} className="space-y-4">
+
+                  {/* Item name */}
+                  <div>
+                    <label className="block text-sm font-medium text-dark-300 mb-1.5">
+                      Item Name <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      id="menu-form-name"
+                      type="text"
+                      value={form.name}
+                      onChange={(e) => setForm({ ...form, name: e.target.value })}
+                      placeholder="e.g. Grilled Sea Bass"
+                      className="w-full bg-dark-800 border border-dark-600 rounded-xl px-4 py-3
+                                 text-white placeholder-dark-500 text-sm
+                                 focus:outline-none focus:border-aura-500 focus:ring-2 focus:ring-aura-500/20
+                                 transition-all"
+                    />
+                  </div>
+
+                  {/* Price */}
+                  <div>
+                    <label className="block text-sm font-medium text-dark-300 mb-1.5">
+                      Price (USD) <span className="text-red-400">*</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-dark-400 font-bold">$</span>
+                      <input
+                        id="menu-form-price"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={form.price}
+                        onChange={(e) => setForm({ ...form, price: e.target.value })}
+                        placeholder="0.00"
+                        className="w-full bg-dark-800 border border-dark-600 rounded-xl pl-8 pr-4 py-3
+                                   text-white placeholder-dark-500 text-sm
+                                   focus:outline-none focus:border-aura-500 focus:ring-2 focus:ring-aura-500/20
+                                   transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Category */}
+                  <div>
+                    <label className="block text-sm font-medium text-dark-300 mb-1.5">Category</label>
+                    <select
+                      id="menu-form-category"
+                      value={form.category}
+                      onChange={(e) => setForm({ ...form, category: e.target.value })}
+                      className="w-full bg-dark-800 border border-dark-600 rounded-xl px-4 py-3
+                                 text-white text-sm focus:outline-none focus:border-aura-500
+                                 focus:ring-2 focus:ring-aura-500/20 transition-all"
+                    >
+                      {MENU_CATEGORIES.map((c) => (
+                        <option key={c.value} value={c.value}>{c.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Prep time */}
+                  <div>
+                    <label className="block text-sm font-medium text-dark-300 mb-1.5">Prep Time</label>
+                    <input
+                      id="menu-form-time"
+                      type="text"
+                      value={form.time}
+                      onChange={(e) => setForm({ ...form, time: e.target.value })}
+                      placeholder="e.g. 12 min"
+                      className="w-full bg-dark-800 border border-dark-600 rounded-xl px-4 py-3
+                                 text-white placeholder-dark-500 text-sm
+                                 focus:outline-none focus:border-aura-500 focus:ring-2 focus:ring-aura-500/20
+                                 transition-all"
+                    />
+                  </div>
+
+                  {/* Emoji picker */}
+                  <div>
+                    <label className="block text-sm font-medium text-dark-300 mb-2">Emoji Icon</label>
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {COMMON_EMOJIS.map((emoji) => (
+                        <button
+                          key={emoji}
+                          type="button"
+                          onClick={() => setForm({ ...form, emoji })}
+                          className={`text-xl w-9 h-9 rounded-lg transition-all flex items-center justify-center
+                                      ${form.emoji === emoji
+                                        ? 'bg-aura-600/30 ring-2 ring-aura-500 scale-110'
+                                        : 'bg-dark-700 hover:bg-dark-600'}`}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-dark-500">Selected: <span className="text-xl">{form.emoji}</span></p>
+                  </div>
+
+                  {/* Error / success */}
+                  {formError && (
+                    <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-sm text-red-400">
+                      ⚠️ {formError}
+                    </div>
+                  )}
+                  {formSuccess && (
+                    <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3 text-sm text-emerald-400">
+                      ✅ {formSuccess}
+                    </div>
+                  )}
+
+                  {/* Submit */}
+                  <button
+                    id="menu-form-submit"
+                    type="submit"
+                    className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-aura-600 to-aura-500
+                               hover:from-aura-500 hover:to-aura-400 text-white font-bold text-sm
+                               shadow-lg shadow-aura-600/20 active:scale-95 transition-all
+                               flex items-center justify-center gap-2"
+                  >
+                    <Save size={16} />
+                    Add to Menu
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            {/* ── Current Menu List (right col) ── */}
+            <div className="lg:col-span-3">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-display text-xl font-bold text-white flex items-center gap-2">
+                  <UtensilsCrossed size={20} className="text-aura-400" />
+                  Current Menu
+                </h2>
+                <span className="text-sm text-dark-400">{menuItems.length} items</span>
+              </div>
+
+              {/* Group by category */}
+              {MENU_CATEGORIES.map(({ value: cat, label: catLabel }) => {
+                const items = menuItems.filter((i) => i.category === cat);
+                if (items.length === 0) return null;
+                return (
+                  <div key={cat} className="mb-6">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-dark-500 mb-3 px-1">
+                      {catLabel}
+                    </h3>
+                    <div className="space-y-2">
+                      {items.map((item) => (
+                        <div
+                          key={item.id}
+                          id={`admin-menu-row-${item.id}`}
+                          className="glass-light rounded-xl px-4 py-3 flex items-center gap-4
+                                     hover:border-white/10 transition-all group"
+                        >
+                          <span className="text-2xl">{item.emoji}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-white truncate">{item.name}</p>
+                            <p className="text-xs text-dark-500">⏱ {item.time}</p>
+                          </div>
+                          <span className="text-base font-bold text-aura-400 flex-shrink-0">
+                            ${item.price.toFixed(2)}
+                          </span>
+                          {/* Delete */}
+                          {/* [BACKEND INTEGRATION: TODO] - DELETE /api/menu/{item.id} */}
+                          <button
+                            id={`delete-item-${item.id}`}
+                            onClick={() => handleDeleteItem(item.id, item.name)}
+                            className="opacity-0 group-hover:opacity-100 w-8 h-8 rounded-lg
+                                       hover:bg-red-500/20 text-dark-500 hover:text-red-400
+                                       transition-all flex items-center justify-center flex-shrink-0"
+                            title="Remove item"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <Footer />
+      </div>
+    </div>
+  );
+}

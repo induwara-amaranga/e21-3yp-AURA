@@ -53,6 +53,7 @@ export default {
                 'slide-in-right': 'slideInRight 0.3s ease-out',
                 'pulse-soft': 'pulseSoft 2s ease-in-out infinite',
                 'shimmer': 'shimmer 2s linear infinite',
+                'bounce-soft': 'bounceSoft 0.8s ease-in-out',
             },
             keyframes: {
                 glow: {
@@ -78,6 +79,11 @@ export default {
                 shimmer: {
                     '0%': { backgroundPosition: '-200% 0' },
                     '100%': { backgroundPosition: '200% 0' },
+                },
+                bounceSoft: {
+                    '0%, 100%': { transform: 'scale(1)' },
+                    '40%':      { transform: 'scale(1.15)' },
+                    '60%':      { transform: 'scale(0.95)' },
                 },
             },
             backdropBlur: {
