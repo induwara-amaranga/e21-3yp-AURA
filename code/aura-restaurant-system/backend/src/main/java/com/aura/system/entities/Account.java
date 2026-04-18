@@ -69,7 +69,8 @@ public class Account implements UserDetails {
         ADMIN,
         STAFF,
         KITCHEN,
-        CUSTOMER
+        CUSTOMER,
+        TABLE
     }
 } 
     

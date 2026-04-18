@@ -18,4 +18,13 @@ public class Status {
 
     @Column(name = "status_name", nullable = false, unique = true)
     private String statusName;
+
+
+    public static enum StatusType {
+        PENDING,
+        PREPARING,
+        READY,
+        DELIVERED,
+        PAID
+    }
 }
