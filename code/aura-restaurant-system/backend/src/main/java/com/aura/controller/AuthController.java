@@ -3,7 +3,7 @@ package com.aura.controller;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import com.aura.dto.AuthDtos.AuthResponse;
 import com.aura.dto.AuthDtos.LoginRequest;
-import com.aura.dto.AuthDtos.RegisterRequest;
+import com.aura.dto.AuthDtos.CustomerRegisterRequest;
 import com.aura.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -40,17 +40,17 @@ public class AuthController {
     /**
      * POST /api/auth/register
      *
-     * ADMIN only — creates new staff accounts.
-     * Secured via @PreAuthorize + SecurityConfig route rules.
+     * 
+     * 
      *
-     * Request:  { "username": "chef_bob", "password": "secure123", "role": "KITCHEN" }
+     * Request:  { "username": "chef_bob", "password": "secure123", "firstName": "Bob", "lastName": "Chef" , "email": "bob.chef@example.com", "phone": "123-456-7890" }
      * Response: { "token": "eyJ...", "username": "chef_bob", "role": "KITCHEN", "expiresIn": 86400 }
      */
-    @PostMapping("/register")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/register") // customer login only. need another endpoint for staff
+    //@PreAuthorize("hasRole('ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Register a new staff account (Admin only)")
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
+    @Operation(summary = "Register a new customer")
+    public ResponseEntity<AuthResponse> register(@Valid @RequestBody CustomerRegisterRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(authService.register(request));
     }

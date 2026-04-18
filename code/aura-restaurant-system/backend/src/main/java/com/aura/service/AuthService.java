@@ -2,12 +2,18 @@ package com.aura.service;
 
 import com.aura.dto.AuthDtos.AuthResponse;
 import com.aura.dto.AuthDtos.LoginRequest;
-import com.aura.dto.AuthDtos.RegisterRequest;
+import com.aura.dto.AuthDtos.CustomerRegisterRequest;
 import com.aura.exception.UsernameAlreadyExistsException;
 import com.aura.model.User;
-import com.aura.model.User.Role;
+//import com.aura.model.User.Role;
 import com.aura.repository.UserRepository;
 import com.aura.security.JwtUtil;
+import com.aura.system.entities.Account;
+import com.aura.system.entities.Customer;
+import com.aura.system.repositories.AccountRepository;
+import com.aura.system.repositories.CustomerRepository;
+import com.aura.system.entities.Account.Role;
+
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,6 +33,8 @@ public class AuthService {
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     private final UserRepository userRepository;
+    private final AccountRepository accountRepository;
+    private final CustomerRepository customerRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final AuthenticationManager authenticationManager;
@@ -54,55 +62,58 @@ public class AuthService {
             throw new BadCredentialsException("Invalid username or password");
         }
 
-        User user = userRepository.findByUsername(request.username())
+        Account account = accountRepository.findByUsername(request.username())
                 .orElseThrow(() -> new BadCredentialsException("Invalid username or password"));
 
-        String token = jwtUtil.generateToken(user);
-        log.info("User '{}' logged in with role {}", user.getUsername(), user.getRole());
+        String token = jwtUtil.generateToken(account);
+        log.info("User '{}' logged in with role {}", account.getUsername(), account.getRole());
 
-        return buildResponse(token, user);
+        return buildResponse(token, account);
     }
 
     // ─── Register ────────────────────────────────────────────────────────────
 
     /**
-     * Creates a new staff account.
-     * Only reachable by ADMIN users (enforced in SecurityConfig).
+     * Creates a new customer account.
+     
      */
-    @Transactional
-    public AuthResponse register(RegisterRequest request) {
-        if (userRepository.existsByUsername(request.username())) {
-            throw new UsernameAlreadyExistsException(
-                    "Username '" + request.username() + "' is already taken"
-            );
+   @Transactional
+    public AuthResponse register(CustomerRegisterRequest request) {
+        if (accountRepository.existsByUsername(request.username())) {
+            throw new UsernameAlreadyExistsException("Username already taken");
         }
 
-        Role role = (request.role() != null) ? request.role() : Role.STAFF;
+        // ✅ Always CUSTOMER — role cannot be chosen by the user
+        Account account = Account.builder()
+            .username(request.username())
+            .passwordHash(passwordEncoder.encode(request.password()))
+            .role(Role.CUSTOMER)  // hardcoded, ignore request.role()
+            .build();
+        accountRepository.save(account);
 
-        User user = User.builder()
-                .username(request.username())
-                .passwordHash(passwordEncoder.encode(request.password()))
-                .role(role)
-                .active(true)
-                .build();
+        Customer customer = Customer.builder()
+            .account(account)
+            .firstName(request.firstName())
+            .lastName(request.lastName())
+            .email(request.email())
+            .phone(request.phone())
+            .build();
+        customerRepository.save(customer);
 
-        userRepository.save(user);
-        log.info("New user '{}' registered with role {}", user.getUsername(), user.getRole());
-
-        String token = jwtUtil.generateToken(user);
-        return buildResponse(token, user);
+        String token = jwtUtil.generateToken(account);
+        return buildResponse(token, account);
     }
 
     // ─── Helper ──────────────────────────────────────────────────────────────
 
-    private AuthResponse buildResponse(String token, User user) {
-        return new AuthResponse(
-                token,
-                user.getUsername(),
-                user.getRole().name(),
-                expiryMs / 1000   // send as seconds
-        );
-    }
+    private AuthResponse buildResponse(String token, Account account) {
+    return new AuthResponse(
+            token,
+            account.getUsername(),
+            account.getRole().name(),
+            expiryMs / 1000
+    );
+}
 }
 
 

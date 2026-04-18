@@ -1,4 +1,4 @@
-package com.aura.system.controllers;
+package com.aura.system.controllers; // root is src/main/java
 
 import com.aura.system.entities.MenuItem;
 import com.aura.system.services.MenuItemService;

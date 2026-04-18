@@ -8,17 +8,17 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "staff")
+@Table(name = "customers")
 @Getter @Setter @Builder
 @NoArgsConstructor @AllArgsConstructor
-public class Staff {
+public class Customer {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "staff_id")
+    @Column(name = "customer_id")
     private Long id;
 
-    // One account → one staff profile
+    // One account → one customer profile
     @OneToOne
     @JoinColumn(name = "account_id", nullable = false, unique = true)
     private Account account;
@@ -50,7 +50,6 @@ public class Staff {
     @PreUpdate
     protected void onUpdate() { updatedAt = LocalDateTime.now(); }
 
-    // Convenience method
     public String getFullName() {
         return firstName + " " + lastName;
     }
