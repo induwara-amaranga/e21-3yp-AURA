@@ -1,3 +1,15 @@
+/**
+ * Legacy order hook based on Zustand.
+ *
+ * NOTE:
+ * New order flow uses RestaurantContext for cross-view consistency.
+ * Keep this hook only for compatibility until all pages are migrated.
+ *
+ * [API ENDPOINT]: GET /api/v1/orders
+ * [DATA SYNC]: Once backend order streaming is integrated, this hook
+ * should proxy the shared context selectors instead of local store-only data.
+ */
+
 import { useMemo } from 'react';
 import useOrderStore from '../store/useOrderStore';
 

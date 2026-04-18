@@ -1,3 +1,7 @@
+/**
+ * Displays a normalized order status pill (PENDING/PREPARING/READY/DELIVERED/etc.).
+ */
+
 import { getStatusColor } from '../../utils/helpers';
 
 function StatusBadge({ status }) {

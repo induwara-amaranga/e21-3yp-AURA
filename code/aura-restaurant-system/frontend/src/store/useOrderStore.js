@@ -1,3 +1,15 @@
+/**
+ * Legacy Zustand order store.
+ *
+ * NOTE:
+ * Primary source of truth is now RestaurantContext.
+ * This store remains for backward compatibility with older components.
+ *
+ * [API ENDPOINT]: GET /api/v1/orders, PATCH /api/v1/orders/:id/status
+ * [DATA SYNC]: Replace in-memory transitions with backend-synced state
+ * when fully migrating remaining consumers.
+ */
+
 import { create } from 'zustand';
 
 const generateId = () => `ORD-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
