@@ -1,3 +1,7 @@
+/**
+ * Global footer used in staff-facing pages.
+ */
+
 import { Zap } from 'lucide-react';
 
 function Footer() {
