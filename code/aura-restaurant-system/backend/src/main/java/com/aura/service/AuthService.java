@@ -5,7 +5,6 @@ import com.aura.dto.AuthDtos.LoginRequest;
 import com.aura.dto.AuthDtos.CustomerRegisterRequest;
 import com.aura.exception.UsernameAlreadyExistsException;
 import com.aura.model.User;
-//import com.aura.model.User.Role;
 import com.aura.repository.UserRepository;
 import com.aura.security.JwtUtil;
 import com.aura.system.entities.Account;
@@ -46,8 +45,7 @@ public class AuthService {
 
     /**
      * Authenticates a staff member and returns a signed JWT.
-     * Throws BadCredentialsException for wrong username or password —
-     * we use the same error message for both to prevent user enumeration.
+     * Loads from 'staff' table to match UserDetailsServiceImpl.
      */
     public AuthResponse login(LoginRequest request) {
         try {
@@ -58,36 +56,36 @@ public class AuthService {
                     )
             );
         } catch (AuthenticationException e) {
-            // Do NOT reveal whether username or password was wrong
             throw new BadCredentialsException("Invalid username or password");
         }
 
-        Account account = accountRepository.findByUsername(request.username())
+        // Load from staff table — must match what UserDetailsServiceImpl loads
+        User user = userRepository.findByUsername(request.username())
                 .orElseThrow(() -> new BadCredentialsException("Invalid username or password"));
 
-        String token = jwtUtil.generateToken(account);
-        log.info("User '{}' logged in with role {}", account.getUsername(), account.getRole());
+        String token = jwtUtil.generateToken(user);
+        log.info("User '{}' logged in with role {}", user.getUsername(), user.getRole());
 
-        return buildResponse(token, account);
+        return buildStaffResponse(token, user);
     }
 
-    // ─── Register ────────────────────────────────────────────────────────────
+    // ─── Register (Customer) ─────────────────────────────────────────────────
 
     /**
-     * Creates a new customer account.
-     
+     * Creates a new customer account with CUSTOMER role.
+     * Customers cannot choose their role; it is always set to CUSTOMER.
      */
-   @Transactional
+    @Transactional
     public AuthResponse register(CustomerRegisterRequest request) {
         if (accountRepository.existsByUsername(request.username())) {
             throw new UsernameAlreadyExistsException("Username already taken");
         }
 
-        // ✅ Always CUSTOMER — role cannot be chosen by the user
+        // Always CUSTOMER — role cannot be chosen by the user
         Account account = Account.builder()
             .username(request.username())
             .passwordHash(passwordEncoder.encode(request.password()))
-            .role(Role.CUSTOMER)  // hardcoded, ignore request.role()
+            .role(Role.CUSTOMER)
             .build();
         accountRepository.save(account);
 
@@ -101,19 +99,28 @@ public class AuthService {
         customerRepository.save(customer);
 
         String token = jwtUtil.generateToken(account);
-        return buildResponse(token, account);
+        return buildAccountResponse(token, account);
     }
 
-    // ─── Helper ──────────────────────────────────────────────────────────────
+    // ─── Helpers ─────────────────────────────────────────────────────────────
 
-    private AuthResponse buildResponse(String token, Account account) {
-    return new AuthResponse(
-            token,
-            account.getUsername(),
-            account.getRole().name(),
-            expiryMs / 1000
-    );
+    // Used for staff login (from staff table)
+    private AuthResponse buildStaffResponse(String token, User user) {
+        return new AuthResponse(
+                token,
+                user.getUsername(),
+                user.getRole().name(),
+                expiryMs / 1000
+        );
+    }
+
+    // Used for customer register (from accounts table)
+    private AuthResponse buildAccountResponse(String token, Account account) {
+        return new AuthResponse(
+                token,
+                account.getUsername(),
+                account.getRole().name(),
+                expiryMs / 1000
+        );
+    }
 }
-}
-
-

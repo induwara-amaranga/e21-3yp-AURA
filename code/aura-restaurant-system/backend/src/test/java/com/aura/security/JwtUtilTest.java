@@ -27,7 +27,7 @@ class JwtUtilTest {
     private User buildUser(String username, User.Role role) {
         return User.builder()
                 .username(username)
-                .passwordHash("$2a$12$ignored")
+                .password("$2a$12$ignored")
                 .role(role)
                 .active(true)
                 .build();
