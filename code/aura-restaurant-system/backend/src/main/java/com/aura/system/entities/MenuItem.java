@@ -30,4 +30,15 @@ public class MenuItem {
 
     @Column(name = "availability", nullable = false)
     private Boolean availability;
+
+    // 🔹 New fields
+
+    // @Column(name = "rating")
+    // private Float rating; // e.g., 4.5
+
+    @Column(name = "image_url")
+    private String imageUrl; // link to image
+
+    @Column(name = "emoji", length = 10)
+    private String emoji; // e.g., 🍕🍔
 }

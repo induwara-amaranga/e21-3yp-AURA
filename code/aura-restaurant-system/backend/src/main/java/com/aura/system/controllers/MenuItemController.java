@@ -53,7 +53,7 @@ public class MenuItemController {
 
     // ─── CREATE MENU ITEM ───────────────────────────────────────────
     // POST http://localhost:8080/api/menu
-    // Body: { "name": "Pizza", "price": 9.99, "category": "mains", "availability": true }
+    // Body: { "name": "Pizza", "price": 9.99, "category": "mains", "availability": true , "rating": 4.5, "image_url": "http://example.com/pizza.jpg", "emoji": "🍕" }
     @PostMapping
     public ResponseEntity<MenuItem> createMenuItem(@RequestBody MenuItem menuItem) {
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -62,7 +62,7 @@ public class MenuItemController {
 
     // ─── UPDATE MENU ITEM ───────────────────────────────────────────
     // PUT http://localhost:8080/api/menu/1
-    // Body: { "name": "Pizza", "price": 12.99, "category": "mains", "availability": true }
+    // Body: { "name": "Pizza", "price": 12.99, "category": "mains", "availability": true , "rating": 4.5, "image_url": "http://example.com/pizza.jpg", "emoji": "🍕" }
     @PutMapping("/{id}")
     public ResponseEntity<MenuItem> updateMenuItem(@PathVariable Integer id,
                                                     @RequestBody MenuItem menuItem) {

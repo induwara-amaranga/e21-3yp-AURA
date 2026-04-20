@@ -33,4 +33,27 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
     @Query("SELECT SUM(o.totalAmount) FROM Order o WHERE o.orderTime BETWEEN :start AND :end")
     Float calculateRevenueBetween(@Param("start") LocalDateTime start,
                                   @Param("end") LocalDateTime end);
+        
+    // ── new: admin analytics ─────────────────────────────────────────────────
+
+    /**
+     * Counts orders whose status is PENDING or PREPARING.
+     * These are the "in-flight" orders visible on the kitchen dashboard.
+     */
+    @Query("SELECT COUNT(o) FROM Order o WHERE o.status IN ('pending', 'preparing')")
+    long countActiveOrders();
+
+    /**
+     * Sums totalAmount for orders that have no matching PAID payment.
+     * NOT EXISTS handles the case where the payment row is missing entirely.
+     * COALESCE returns 0.0 instead of null when no unpaid orders exist.
+     */
+    @Query("""
+        SELECT COALESCE(SUM(o.totalAmount), 0.0) FROM Order o
+        WHERE NOT EXISTS (
+            SELECT 1 FROM Payment p
+            WHERE p.order = o AND p.paymentStatus = 'paid'
+        )
+        """)
+    Float sumUnpaidOrderTotals();
 }
