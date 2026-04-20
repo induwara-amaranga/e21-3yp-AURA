@@ -62,6 +62,7 @@ public class Account implements UserDetails {
     @Override public boolean isAccountNonLocked()      { return true; }
     @Override public boolean isCredentialsNonExpired() { return true; }
     @Override public boolean isEnabled()               { return active; }
+    @Override public String getUsername()              { return username; }
 
     // ─── Role ─────────────────────────────────────────────────────────────────
 
