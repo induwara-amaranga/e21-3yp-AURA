@@ -1,6 +1,6 @@
 package com.aura.security;
 
-import com.aura.model.User;
+import com.aura.system.entities.Account;
 import io.jsonwebtoken.ExpiredJwtException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -24,10 +24,10 @@ class JwtUtilTest {
         ReflectionTestUtils.setField(jwtUtil, "expiryMs", 86400000L); // 24h
     }
 
-    private User buildUser(String username, User.Role role) {
-        return User.builder()
+    private Account buildAccount(String username, Account.Role role) {
+        return Account.builder()
                 .username(username)
-                .password("$2a$12$ignored")
+                .passwordHash("$2a$12$ignored")
                 .role(role)
                 .active(true)
                 .build();
@@ -36,8 +36,8 @@ class JwtUtilTest {
     @Test
     @DisplayName("Generated token contains correct username")
     void generateToken_containsUsername() {
-        User user = buildUser("chef_bob", User.Role.KITCHEN);
-        String token = jwtUtil.generateToken(user);
+        Account acc = buildAccount("chef_bob", Account.Role.KITCHEN);
+        String token = jwtUtil.generateToken(acc);
 
         assertThat(jwtUtil.extractUsername(token)).isEqualTo("chef_bob");
     }
@@ -45,8 +45,8 @@ class JwtUtilTest {
     @Test
     @DisplayName("Generated token contains correct role claim")
     void generateToken_containsRoleClaim() {
-        User user = buildUser("staff_jane", User.Role.STAFF);
-        String token = jwtUtil.generateToken(user);
+        Account acc = buildAccount("staff_jane", Account.Role.STAFF);
+        String token = jwtUtil.generateToken(acc);
 
         assertThat(jwtUtil.extractRoles(token)).contains("ROLE_STAFF");
     }
@@ -54,17 +54,17 @@ class JwtUtilTest {
     @Test
     @DisplayName("Valid token passes validation")
     void validateToken_validToken_returnsTrue() {
-        User user = buildUser("admin", User.Role.ADMIN);
-        String token = jwtUtil.generateToken(user);
+        Account acc = buildAccount("admin", Account.Role.ADMIN);
+        String token = jwtUtil.generateToken(acc);
 
-        assertThat(jwtUtil.validateToken(token, user)).isTrue();
+        assertThat(jwtUtil.validateToken(token, acc)).isTrue();
     }
 
     @Test
     @DisplayName("Token for different user fails validation")
     void validateToken_wrongUser_returnsFalse() {
-        User admin = buildUser("admin", User.Role.ADMIN);
-        User other = buildUser("other_user", User.Role.STAFF);
+        Account admin = buildAccount("admin", Account.Role.ADMIN);
+        Account other = buildAccount("other_user", Account.Role.STAFF);
 
         String token = jwtUtil.generateToken(admin);
 
@@ -74,10 +74,9 @@ class JwtUtilTest {
     @Test
     @DisplayName("Expired token throws ExpiredJwtException")
     void expiredToken_throwsException() {
-        // Set expiry to -1ms so token is immediately expired
         ReflectionTestUtils.setField(jwtUtil, "expiryMs", -1L);
-        User user = buildUser("admin", User.Role.ADMIN);
-        String token = jwtUtil.generateToken(user);
+        Account acc = buildAccount("admin", Account.Role.ADMIN);
+        String token = jwtUtil.generateToken(acc);
 
         assertThatThrownBy(() -> jwtUtil.extractUsername(token))
                 .isInstanceOf(ExpiredJwtException.class);
@@ -86,9 +85,9 @@ class JwtUtilTest {
     @Test
     @DisplayName("Tampered token fails validation")
     void tamperedToken_failsValidation() {
-        User user = buildUser("admin", User.Role.ADMIN);
-        String token = jwtUtil.generateToken(user) + "tampered";
+        Account acc = buildAccount("admin", Account.Role.ADMIN);
+        String token = jwtUtil.generateToken(acc) + "tampered";
 
-        assertThat(jwtUtil.validateToken(token, user)).isFalse();
+        assertThat(jwtUtil.validateToken(token, acc)).isFalse();
     }
 }

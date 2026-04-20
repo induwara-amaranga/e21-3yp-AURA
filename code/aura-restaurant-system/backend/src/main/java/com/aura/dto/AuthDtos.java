@@ -1,6 +1,8 @@
 package com.aura.dto;
 
 import com.aura.system.entities.Account.Role;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -69,7 +71,8 @@ public class AuthDtos {
             String email,
 
             String phone,
-
+            
+            @JsonProperty("role")
             Role role   // STAFF | KITCHEN | ADMIN — set by admin
     ) {}
 

@@ -30,4 +30,15 @@ public interface PaymentRepository extends JpaRepository<Payment, Integer> {
            "AND p.paymentTime BETWEEN :start AND :end")
     Float calculateTotalRevenue(@Param("start") LocalDateTime start,
                                 @Param("end") LocalDateTime end);
+
+
+       // ── new: admin analytics ─────────────────────────────────────────────────
+
+    /**
+     * Total amount for any given payment status (e.g. "paid", "pending").
+     * COALESCE returns 0.0 instead of null when no rows match.
+     * Used by GET /admin/stats and GET /admin/revenue?status=
+     */
+    @Query("SELECT COALESCE(SUM(p.amount), 0.0) FROM Payment p WHERE p.paymentStatus = :status")
+    Float sumByPaymentStatus(@Param("status") String status);
 }

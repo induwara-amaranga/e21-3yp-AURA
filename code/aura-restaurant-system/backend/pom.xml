@@ -16,7 +16,7 @@
 	<description>AURA Restaurant System</description>
 
 	<properties>
-		<java.version>25</java.version>
+		<java.version>17</java.version>
 		<lombok.version>1.18.42</lombok.version>
 	</properties>
 

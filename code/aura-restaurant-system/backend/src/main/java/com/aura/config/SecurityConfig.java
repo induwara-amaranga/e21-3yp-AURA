@@ -42,6 +42,8 @@ public class SecurityConfig {
             "/api/tables/**",
             "/api/orders/**",
             "/api/reservations/**",
+            "/api/admin/**",
+            "/api/ratings/**",
             "/swagger-ui/**",
             "/swagger-ui.html",
             "/v3/api-docs/**"
@@ -64,7 +66,7 @@ public class SecurityConfig {
                 // Staff role — payments and table management
                 //.requestMatchers("/api/payments/**", "/api/tables/**").hasAnyRole("STAFF", "ADMIN")
                 // Admin only
-                .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                //.requestMatchers("/api/admin/**").hasRole("ADMIN")
                 // Everything else requires a valid JWT
                 .anyRequest().authenticated()
             )

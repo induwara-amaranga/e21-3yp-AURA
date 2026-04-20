@@ -44,7 +44,7 @@ public class AuthController {
      * 
      *
      * Request:  { "username": "chef_bob", "password": "secure123", "firstName": "Bob", "lastName": "Chef" , "email": "bob.chef@example.com", "phone": "123-456-7890" }
-     * Response: { "token": "eyJ...", "username": "chef_bob", "role": "KITCHEN", "expiresIn": 86400 }
+     * Response: { "token": "eyJ...", "username": "chef_bob", "role": "CUSTOMER", "expiresIn": 86400 }
      */
     @PostMapping("/register") // customer login only. need another endpoint for staff
     //@PreAuthorize("hasRole('ADMIN')")

@@ -42,7 +42,7 @@ spring:
   # baseline-on-migrate: true means if the DB already has tables from before
   # Flyway was added, it won't panic — it just starts tracking from here.
   flyway:
-    enabled: true
+    enabled: false
     locations: classpath:db/migration
     baseline-on-migrate: true
 
