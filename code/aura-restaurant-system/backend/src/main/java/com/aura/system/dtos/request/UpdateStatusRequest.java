@@ -8,4 +8,6 @@ public class UpdateStatusRequest {
 
     @NotBlank(message = "Status is required")
     private String status;
+    private Integer batteryLevel; // New IP
+    private String location; // New IP
 }
