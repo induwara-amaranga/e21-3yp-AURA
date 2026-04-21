@@ -43,6 +43,7 @@ public class SecurityConfig {
             "/api/orders/**",
             "/api/reservations/**",
             "/api/admin/**",
+            "/api/robots/**",
             "/api/ratings/**",
             "/swagger-ui/**",
             "/swagger-ui.html",
