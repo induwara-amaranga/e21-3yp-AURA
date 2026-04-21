@@ -1,23 +1,24 @@
 package com.aura.system.mqtt;
 
-import org.eclipse.paho.client.mqttv3.MqttClient;
-import org.eclipse.paho.client.mqttv3.MqttException;
-import org.eclipse.paho.client.mqttv3.MqttMessage;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+@Slf4j
 @Component
 public class MqttPublisher {
-    private final String brokerUrl = "tcp://localhost:1883";
 
+    private final MqttGateway mqttGateway;
+
+    public MqttPublisher(MqttGateway mqttGateway) {
+        this.mqttGateway = mqttGateway;
+    }
+
+    /**
+     * Publish any message to any MQTT topic.
+     * Uses the shared persistent connection (no reconnect overhead).
+     */
     public void publish(String topic, String payload) {
-        try (MqttClient client = new MqttClient(brokerUrl, MqttClient.generateClientId())) {
-            client.connect();
-            MqttMessage message = new MqttMessage(payload.getBytes());
-            client.publish(topic, message);
-            client.disconnect();
-            System.out.println("Published: " + payload);
-        } catch (MqttException e) {
-            e.printStackTrace();
-        }
+        mqttGateway.sendToMqtt(payload, topic);
+        log.info("📤 Published to [{}]: {}", topic, payload);
     }
 }
