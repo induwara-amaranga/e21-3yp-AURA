@@ -62,6 +62,7 @@ public class SecurityConfig {
             // Route-level access rules
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
+                .requestMatchers("/api/images/**").permitAll()
                 // Kitchen role — update order status only
                 //.requestMatchers("/api/orders/*/status").hasAnyRole("KITCHEN", "ADMIN")
                 // Staff role — payments and table management
