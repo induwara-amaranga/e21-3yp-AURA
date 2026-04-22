@@ -1,10 +1,12 @@
 package com.aura.system.services.impl;
 
+import com.aura.service.ImageService;
 import com.aura.system.entities.MenuItem;
 import com.aura.system.repositories.MenuItemRepository;
 import com.aura.system.services.MenuItemService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -13,6 +15,7 @@ import java.util.List;
 public class MenuItemServiceImpl implements MenuItemService {
 
     private final MenuItemRepository menuItemRepository;
+    private final ImageService imageService;
 
     @Override
     public List<MenuItem> getAllMenuItems() {
@@ -41,19 +44,30 @@ public class MenuItemServiceImpl implements MenuItemService {
     }
 
     @Override
-    public MenuItem createMenuItem(MenuItem menuItem) {
+    public MenuItem createMenuItem(MenuItem menuItem, MultipartFile file) {
+        if (file != null && !file.isEmpty()) {
+            String imageUrl = imageService.uploadImage(file);
+            menuItem.setImageUrl(imageUrl);
+        }
+
         return menuItemRepository.save(menuItem);
     }
 
     @Override
-    public MenuItem updateMenuItem(Integer id, MenuItem updated) {
-        MenuItem existing = getMenuItemById(id);  // throws if not found
+    public MenuItem updateMenuItem(Integer id, MenuItem updated, MultipartFile file) {
+        MenuItem existing = getMenuItemById(id);
 
         existing.setName(updated.getName());
         existing.setDescription(updated.getDescription());
         existing.setPrice(updated.getPrice());
         existing.setCategory(updated.getCategory());
         existing.setAvailability(updated.getAvailability());
+        existing.setEmoji(updated.getEmoji());
+
+        if (file != null && !file.isEmpty()) {
+            String imageUrl = imageService.uploadImage(file);
+            existing.setImageUrl(imageUrl);
+        }
 
         return menuItemRepository.save(existing);
     }
@@ -61,7 +75,7 @@ public class MenuItemServiceImpl implements MenuItemService {
     @Override
     public MenuItem toggleAvailability(Integer id) {
         MenuItem existing = getMenuItemById(id);
-        existing.setAvailability(!existing.getAvailability());  // flip true ↔ false
+        existing.setAvailability(!existing.getAvailability());
         return menuItemRepository.save(existing);
     }
 
