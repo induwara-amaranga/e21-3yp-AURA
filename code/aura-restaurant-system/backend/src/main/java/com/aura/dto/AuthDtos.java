@@ -9,10 +9,6 @@ import jakarta.validation.constraints.Size;
 
 public class AuthDtos {
 
-    /**
-     * POST /api/auth/login
-     * Same for all roles — everyone logs in the same way.
-     */
     public record LoginRequest(
             @NotBlank(message = "Username is required")
             String username,
@@ -21,11 +17,6 @@ public class AuthDtos {
             String password
     ) {}
 
-    /**
-     * POST /api/auth/register
-     * Public — self-registration for CUSTOMERS only.
-     * Role is NOT accepted here — always defaults to CUSTOMER in AuthService.
-     */
     public record CustomerRegisterRequest(
             @NotBlank(message = "Username is required")
             @Size(min = 3, max = 50, message = "Username must be 3–50 characters")
@@ -47,11 +38,6 @@ public class AuthDtos {
             String phone
     ) {}
 
-    /**
-     * POST /api/admin/staff/create
-     * ADMIN only — creates STAFF, KITCHEN, or ADMIN accounts.
-     * Role is explicitly set by the admin.
-     */
     public record StaffCreateRequest(
             @NotBlank(message = "Username is required")
             @Size(min = 3, max = 50, message = "Username must be 3–50 characters")
@@ -71,19 +57,28 @@ public class AuthDtos {
             String email,
 
             String phone,
-            
+
             @JsonProperty("role")
-            Role role   // STAFF | KITCHEN | ADMIN — set by admin
+            Role role
     ) {}
 
-    /**
-     * Response for login and register.
-     * Returns JWT token and basic account info.
-     */
+    public record ChangePasswordRequest(
+            @NotBlank(message = "Current password is required")
+            String currentPassword,
+
+            @NotBlank(message = "New password is required")
+            @Size(min = 8, message = "New password must be at least 8 characters")
+            String newPassword
+    ) {}
+
+    public record MessageResponse(
+            String message
+    ) {}
+
     public record AuthResponse(
             String token,
             String username,
             String role,
-            long expiresIn   // seconds
+            long expiresIn
     ) {}
 }
