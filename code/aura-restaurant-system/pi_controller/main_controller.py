@@ -3,6 +3,7 @@ import time
 import threading
 import RPi.GPIO as GPIO
 from dotenv import load_dotenv
+from oled_module import OLEDModule
 
 GPIO.setmode(GPIO.BCM)
 
@@ -13,7 +14,12 @@ from servo_module import ServoModule
 load_dotenv()
 
 
-def _touch_worker(touch: TouchModule, servo: ServoModule, stop_event: threading.Event):
+def _touch_worker(
+    touch: TouchModule,
+    servo: ServoModule,
+    oled: OLEDModule,
+    stop_event: threading.Event,
+):
     last_direction = None
     last_trigger_time = 0.0
     debounce_seconds = 0.35
@@ -26,6 +32,7 @@ def _touch_worker(touch: TouchModule, servo: ServoModule, stop_event: threading.
                 if direction != last_direction or (now - last_trigger_time) > debounce_seconds:
                     print(f"Touch detected: {direction}")
                     servo.rotate_to_direction(direction)
+                    oled.look_at(direction)
                     last_direction = direction
                     last_trigger_time = now
             time.sleep(0.05)
@@ -65,10 +72,11 @@ def main():
 
     touch = TouchModule()
     servo = ServoModule()
+    oled = OLEDModule()
     stop_event = threading.Event()
     touch_thread = threading.Thread(
         target=_touch_worker,
-        args=(touch, servo, stop_event),
+        args=(touch, servo, oled, stop_event),
         daemon=True,
     )
     touch_thread.start()
