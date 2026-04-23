@@ -18,6 +18,7 @@ import Footer from '../../components/layout/Footer';
 import { useRestaurant, ORDER_STATUS } from '../../context/RestaurantContext';
 import { useAppContext } from '../../context/AppContext';
 import { getTimeSince } from '../../utils/helpers';
+import { getMenuImageSrc } from '../../utils/menuImages';
 
 // ─── Column config ────────────────────────────────────────────────────────────
 const COLS = [
@@ -205,7 +206,11 @@ export default function KitchenDisplay() {
                       <div className="px-4 py-3 space-y-1.5">
                         {order.items.map((item, idx) => (
                           <div key={idx} className="flex items-center gap-2 text-sm">
-                            <span className="text-lg">{item.emoji}</span>
+                            <img
+                              src={getMenuImageSrc(item.imageFilename)}
+                              alt={item.name}
+                              className="w-8 h-8 rounded-lg object-cover border border-white/10"
+                            />
                             <span className="text-amber-400 font-bold min-w-[1.5rem]">{item.quantity}×</span>
                             <span className="text-gray-200">{item.name}</span>
                           </div>

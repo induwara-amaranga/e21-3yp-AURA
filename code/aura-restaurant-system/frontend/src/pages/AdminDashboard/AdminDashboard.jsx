@@ -14,7 +14,7 @@ import { useState } from 'react';
 import {
   LayoutDashboard, UtensilsCrossed, DollarSign, ShoppingBag,
   Bot, ArrowUpRight, ArrowDownRight, Plus,
-  Trash2, Activity, LogOut, Save, X,
+  Trash2, Activity, LogOut, Save,
 } from 'lucide-react';
 import Card from '../../components/common/Card';
 import StatusBadge from '../../components/common/StatusBadge';
@@ -23,6 +23,7 @@ import Footer from '../../components/layout/Footer';
 import { formatPrice } from '../../utils/helpers';
 import { useAppContext } from '../../context/AppContext';
 import { useRestaurant } from '../../context/RestaurantContext';
+import { AVAILABLE_MENU_IMAGES, getMenuImageSrc, isKnownMenuImage } from '../../utils/menuImages';
 
 // ── Mock robot fleet data ─────────────────────────────────────────────────────
 // [BACKEND INTEGRATION: TODO] - GET /api/robots/status
@@ -45,17 +46,16 @@ const MENU_CATEGORIES = [
   { value: 'drinks',   label: 'Drinks'   },
 ];
 
-const COMMON_EMOJIS = ['🍔','🍕','🍣','🦞','🍖','🍝','🥗','🍫','🍰','🍵','🥭','🍋','🥑','🍮','🍗','🥩','🌮','🍜'];
-
 // ─────────────────────────────────────────────────────────────────────────────
 export default function AdminDashboard() {
-  const { logout, menuItems, addMenuItem, deleteMenuItem } = useAppContext();
+  const { session, logout, menuItems, addMenuItem, deleteMenuItem } = useAppContext();
   const {
     activeOrders,
     orderHistory,
     getConfirmedRevenue,
     getPendingOrderTotal,
   } = useRestaurant();
+  const isAdmin = session?.role === 'admin';
 
   // [API ENDPOINT]: GET /api/v1/admin/revenue?status=PAID
   // [DATA SYNC]: Revenue is derived only from paid tickets so kitchen placements never inflate earnings.
@@ -69,7 +69,12 @@ export default function AdminDashboard() {
 
   // ── Manage Menu form state ────────────────────────────────────────────────
   const [form, setForm] = useState({
-    name: '', price: '', category: 'popular', emoji: '🍔', time: '15 min',
+    name: '',
+    description: '',
+    price: '',
+    category: 'popular',
+    imageFilename: AVAILABLE_MENU_IMAGES[0] || '',
+    time: '15 min',
   });
   const [formError, setFormError]   = useState('');
   const [formSuccess, setFormSuccess] = useState('');
@@ -110,19 +115,37 @@ export default function AdminDashboard() {
     setFormError('');
     setFormSuccess('');
 
+    if (!isAdmin) return setFormError('Only an authenticated admin can modify the menu.');
     if (!form.name.trim()) return setFormError('Item name is required.');
+    if (!form.description.trim()) return setFormError('Please add a short food description.');
     const price = parseFloat(form.price);
     if (isNaN(price) || price <= 0) return setFormError('Enter a valid price greater than 0.');
+    if (!form.imageFilename || !isKnownMenuImage(form.imageFilename)) {
+      return setFormError('Select a valid menu image from assets/food_images.');
+    }
 
-    addMenuItem({ ...form, price });
+    addMenuItem({
+      ...form,
+      name: form.name.trim(),
+      description: form.description.trim(),
+      price,
+    });
     setFormSuccess(`"${form.name}" added to the menu! It's now visible on RobotUI.`);
-    setForm({ name: '', price: '', category: 'popular', emoji: '🍔', time: '15 min' });
+    setForm({
+      name: '',
+      description: '',
+      price: '',
+      category: 'popular',
+      imageFilename: AVAILABLE_MENU_IMAGES[0] || '',
+      time: '15 min',
+    });
     setTimeout(() => setFormSuccess(''), 4000);
   };
 
   // [API ENDPOINT]: DELETE /api/v1/menu/:id
   // [DATA SYNC]: Removes menu rows from shared context so ordering screens cannot use deleted items.
   const handleDeleteItem = (itemId, itemName) => {
+    if (!isAdmin) return;
     if (!window.confirm(`Remove "${itemName}" from the menu?`)) return;
     deleteMenuItem(itemId);
   };
@@ -315,8 +338,15 @@ export default function AdminDashboard() {
                   New items appear on the Robot UI immediately.
                 </p>
 
+                {!isAdmin && (
+                  <div className="mb-4 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 text-xs text-amber-300">
+                    Menu management is locked. Log in with admin credentials to add or remove items.
+                  </div>
+                )}
+
                 {/* [BACKEND INTEGRATION: TODO] - POST /api/menu
-                    On submit, call axiosInstance.post('/menu', formData) */}
+                    On submit, call axiosInstance.post('/menu', { name, description, price, category, prepTime, imageUrl, imagePublicId }).
+                    imageUrl/imagePublicId should come from media upload API below. */}
                 <form onSubmit={handleAddItem} className="space-y-4">
 
                   {/* Item name */}
@@ -329,9 +359,29 @@ export default function AdminDashboard() {
                       type="text"
                       value={form.name}
                       onChange={(e) => setForm({ ...form, name: e.target.value })}
+                      disabled={!isAdmin}
                       placeholder="e.g. Grilled Sea Bass"
                       className="w-full bg-dark-800 border border-dark-600 rounded-xl px-4 py-3
                                  text-white placeholder-dark-500 text-sm
+                                 focus:outline-none focus:border-aura-500 focus:ring-2 focus:ring-aura-500/20
+                                 transition-all"
+                    />
+                  </div>
+
+                  {/* Description */}
+                  <div>
+                    <label className="block text-sm font-medium text-dark-300 mb-1.5">
+                      Description <span className="text-red-400">*</span>
+                    </label>
+                    <textarea
+                      id="menu-form-description"
+                      rows={3}
+                      value={form.description}
+                      onChange={(e) => setForm({ ...form, description: e.target.value })}
+                      disabled={!isAdmin}
+                      placeholder="e.g. Slow-cooked lamb with rosemary and garlic butter."
+                      className="w-full bg-dark-800 border border-dark-600 rounded-xl px-4 py-3
+                                 text-white placeholder-dark-500 text-sm resize-none
                                  focus:outline-none focus:border-aura-500 focus:ring-2 focus:ring-aura-500/20
                                  transition-all"
                     />
@@ -351,6 +401,7 @@ export default function AdminDashboard() {
                         min="0"
                         value={form.price}
                         onChange={(e) => setForm({ ...form, price: e.target.value })}
+                        disabled={!isAdmin}
                         placeholder="0.00"
                         className="w-full bg-dark-800 border border-dark-600 rounded-xl pl-8 pr-4 py-3
                                    text-white placeholder-dark-500 text-sm
@@ -367,6 +418,7 @@ export default function AdminDashboard() {
                       id="menu-form-category"
                       value={form.category}
                       onChange={(e) => setForm({ ...form, category: e.target.value })}
+                      disabled={!isAdmin}
                       className="w-full bg-dark-800 border border-dark-600 rounded-xl px-4 py-3
                                  text-white text-sm focus:outline-none focus:border-aura-500
                                  focus:ring-2 focus:ring-aura-500/20 transition-all"
@@ -385,6 +437,7 @@ export default function AdminDashboard() {
                       type="text"
                       value={form.time}
                       onChange={(e) => setForm({ ...form, time: e.target.value })}
+                      disabled={!isAdmin}
                       placeholder="e.g. 12 min"
                       className="w-full bg-dark-800 border border-dark-600 rounded-xl px-4 py-3
                                  text-white placeholder-dark-500 text-sm
@@ -393,25 +446,34 @@ export default function AdminDashboard() {
                     />
                   </div>
 
-                  {/* Emoji picker */}
+                  {/* Image picker */}
+                  {/* [BACKEND INTEGRATION: TODO] - POST /api/v1/menu/upload-image
+                      Replace this local selector with upload input that stores Cloudinary imageUrl + imagePublicId. */}
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-2">Emoji Icon</label>
-                    <div className="flex flex-wrap gap-2 mb-2">
-                      {COMMON_EMOJIS.map((emoji) => (
-                        <button
-                          key={emoji}
-                          type="button"
-                          onClick={() => setForm({ ...form, emoji })}
-                          className={`text-xl w-9 h-9 rounded-lg transition-all flex items-center justify-center
-                                      ${form.emoji === emoji
-                                        ? 'bg-aura-600/30 ring-2 ring-aura-500 scale-110'
-                                        : 'bg-dark-700 hover:bg-dark-600'}`}
-                        >
-                          {emoji}
-                        </button>
+                    <label className="block text-sm font-medium text-dark-300 mb-1.5">
+                      Image <span className="text-red-400">*</span>
+                    </label>
+                    <select
+                      id="menu-form-image"
+                      value={form.imageFilename}
+                      onChange={(e) => setForm({ ...form, imageFilename: e.target.value })}
+                      disabled={!isAdmin}
+                      className="w-full bg-dark-800 border border-dark-600 rounded-xl px-4 py-3
+                                 text-white text-sm focus:outline-none focus:border-aura-500
+                                 focus:ring-2 focus:ring-aura-500/20 transition-all"
+                    >
+                      {AVAILABLE_MENU_IMAGES.map((imageName) => (
+                        <option key={imageName} value={imageName}>{imageName}</option>
                       ))}
+                    </select>
+                    <p className="text-xs text-dark-500 mt-2 truncate">Selected: {form.imageFilename}</p>
+                    <div className="mt-3 overflow-hidden rounded-xl border border-dark-600 bg-dark-800">
+                      <img
+                        src={getMenuImageSrc(form.imageFilename)}
+                        alt={form.name || 'Selected menu preview'}
+                        className="w-full h-36 object-cover"
+                      />
                     </div>
-                    <p className="text-xs text-dark-500">Selected: <span className="text-xl">{form.emoji}</span></p>
                   </div>
 
                   {/* Error / success */}
@@ -430,9 +492,11 @@ export default function AdminDashboard() {
                   <button
                     id="menu-form-submit"
                     type="submit"
+                    disabled={!isAdmin}
                     className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-aura-600 to-aura-500
                                hover:from-aura-500 hover:to-aura-400 text-white font-bold text-sm
                                shadow-lg shadow-aura-600/20 active:scale-95 transition-all
+                               disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100
                                flex items-center justify-center gap-2"
                   >
                     <Save size={16} />
@@ -469,10 +533,17 @@ export default function AdminDashboard() {
                           className="glass-light rounded-xl px-4 py-3 flex items-center gap-4
                                      hover:border-white/10 transition-all group"
                         >
-                          <span className="text-2xl">{item.emoji}</span>
+                          <img
+                            src={getMenuImageSrc(item.imageFilename)}
+                            alt={item.name}
+                            className="w-14 h-14 rounded-xl object-cover flex-shrink-0 border border-white/10"
+                          />
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-white truncate">{item.name}</p>
-                            <p className="text-xs text-dark-500">⏱ {item.time}</p>
+                            <p className="text-xs text-dark-400 leading-5 max-h-10 overflow-hidden mt-0.5">
+                              {item.description || 'No description yet.'}
+                            </p>
+                            <p className="text-xs text-dark-500 mt-1">⏱ {item.time}</p>
                           </div>
                           <span className="text-base font-bold text-aura-400 flex-shrink-0">
                             ${item.price.toFixed(2)}
@@ -481,10 +552,11 @@ export default function AdminDashboard() {
                           {/* [BACKEND INTEGRATION: TODO] - DELETE /api/menu/{item.id} */}
                           <button
                             id={`delete-item-${item.id}`}
+                            disabled={!isAdmin}
                             onClick={() => handleDeleteItem(item.id, item.name)}
-                            className="opacity-0 group-hover:opacity-100 w-8 h-8 rounded-lg
+                            className={`${isAdmin ? 'opacity-0 group-hover:opacity-100' : 'opacity-40 cursor-not-allowed'} w-8 h-8 rounded-lg
                                        hover:bg-red-500/20 text-dark-500 hover:text-red-400
-                                       transition-all flex items-center justify-center flex-shrink-0"
+                                       transition-all flex items-center justify-center flex-shrink-0`}
                             title="Remove item"
                           >
                             <Trash2 size={15} />

@@ -12,9 +12,10 @@
  */
 
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { DEFAULT_MENU_IMAGE_FILENAME, isKnownMenuImage } from '../utils/menuImages';
 
 const MENU_STORAGE_KEY = 'aura_menu_items';
-const MENU_STORAGE_VER = 1;
+const MENU_STORAGE_VER = 2;
 
 function loadInitialMenuItems() {
   try {
@@ -50,26 +51,164 @@ const MOCK_CREDENTIALS = {
 // ─── Initial Mock Menu Data ───────────────────────────────────────────────────
 // [BACKEND INTEGRATION: TODO] - GET /api/menu
 // Description: On app boot call GET /api/menu.
-//   Returns: [{ id, name, price, category, emoji, prepTime, rating, available }]
+//   Returns: [{ id, name, price, category, imageUrl, imagePublicId, description, prepTime, rating, available }]
+//   imageUrl/imagePublicId should come from Cloudinary once backend media upload is integrated.
 //   Replace with fetched data. Use React Query for caching; invalidate when admin
 //   adds or removes items via POST/DELETE /api/menu.
 // ─────────────────────────────────────────────────────────────────────────────
 const INITIAL_MENU_ITEMS = [
-  { id: 1,  name: 'Truffle Wagyu Burger',    price: 28.99, category: 'popular',  emoji: '🍔', time: '15 min', rating: 4.9 },
-  { id: 2,  name: 'Lobster Risotto',         price: 34.50, category: 'popular',  emoji: '🦞', time: '20 min', rating: 4.8 },
-  { id: 3,  name: 'Dragon Roll Sushi',       price: 22.00, category: 'popular',  emoji: '🍣', time: '12 min', rating: 4.7 },
-  { id: 4,  name: 'Grilled Salmon Fillet',   price: 26.50, category: 'mains',    emoji: '🐟', time: '18 min', rating: 4.6 },
-  { id: 5,  name: 'Herb Crusted Lamb',       price: 32.00, category: 'mains',    emoji: '🍖', time: '25 min', rating: 4.8 },
-  { id: 6,  name: 'Mushroom Ravioli',        price: 19.50, category: 'mains',    emoji: '🍝', time: '14 min', rating: 4.5 },
-  { id: 7,  name: 'Quinoa Buddha Bowl',      price: 16.00, category: 'healthy',  emoji: '🥗', time: '10 min', rating: 4.4 },
-  { id: 8,  name: 'Acai Power Bowl',         price: 14.50, category: 'healthy',  emoji: '🫐', time: '8 min',  rating: 4.5 },
-  { id: 9,  name: 'Avocado Poke Bowl',       price: 18.00, category: 'healthy',  emoji: '🥑', time: '10 min', rating: 4.6 },
-  { id: 10, name: 'Molten Lava Cake',        price: 12.00, category: 'desserts', emoji: '🍫', time: '12 min', rating: 4.9 },
-  { id: 11, name: 'Crème Brûlée',           price: 10.50, category: 'desserts', emoji: '🍮', time: '10 min', rating: 4.7 },
-  { id: 12, name: 'Tiramisu Tower',          price: 13.00, category: 'desserts', emoji: '🍰', time: '8 min',  rating: 4.8 },
-  { id: 13, name: 'Matcha Latte',            price: 6.50,  category: 'drinks',   emoji: '🍵', time: '4 min',  rating: 4.3 },
-  { id: 14, name: 'Fresh Mango Smoothie',    price: 8.00,  category: 'drinks',   emoji: '🥭', time: '5 min',  rating: 4.5 },
-  { id: 15, name: 'Sparkling Rose Lemonade', price: 7.50,  category: 'drinks',   emoji: '🍋', time: '3 min',  rating: 4.4 },
+  {
+    id: 1,
+    name: 'Truffle Wagyu Burger',
+    price: 28.99,
+    category: 'popular',
+    imageFilename: 'Truffle Wagyu Burger.jpg',
+    description: 'Juicy wagyu patty with truffle aioli, caramelized onion, and brioche bun.',
+    time: '15 min',
+    rating: 4.9,
+  },
+  {
+    id: 2,
+    name: 'Lobster Risotto',
+    price: 34.50,
+    category: 'popular',
+    imageFilename: 'Lobster Risotto.jpg',
+    description: 'Creamy arborio risotto with butter-poached lobster and citrus herb finish.',
+    time: '20 min',
+    rating: 4.8,
+  },
+  {
+    id: 3,
+    name: 'Dragon Roll Sushi',
+    price: 22.00,
+    category: 'popular',
+    imageFilename: 'Dragon Roll Sushi.jpg',
+    description: 'Signature dragon roll with fresh seafood, avocado, and house drizzle.',
+    time: '12 min',
+    rating: 4.7,
+  },
+  {
+    id: 4,
+    name: 'Aura special Grilled Salmon Fillet',
+    price: 26.50,
+    category: 'mains',
+    imageFilename: 'Aura special Grilled Salmon Fillet.jpg',
+    description: 'Tender grilled salmon served with seasonal vegetables and lemon butter.',
+    time: '18 min',
+    rating: 4.6,
+  },
+  // Local asset note: exact files for Herb Crusted Lamb and Mushroom Ravioli are not present yet,
+  // so these two rows use the closest available placeholders from assets/food_images.
+  {
+    id: 5,
+    name: 'Herb Crusted Lamb',
+    price: 32.00,
+    category: 'mains',
+    imageFilename: 'lamb-barbecue-steak.jpg',
+    description: 'Herb-marinated lamb with chargrilled finish and rosemary pan sauce.',
+    time: '25 min',
+    rating: 4.8,
+  },
+  {
+    id: 6,
+    name: 'Mushroom Ravioli',
+    price: 19.50,
+    category: 'mains',
+    imageFilename: 'black-tea-with-chocolade-cake-table.jpg',
+    description: 'House ravioli filled with wild mushrooms in a silky garlic cream sauce.',
+    time: '14 min',
+    rating: 4.5,
+  },
+  {
+    id: 7,
+    name: 'Quinoa Buddha Bowl',
+    price: 16.00,
+    category: 'healthy',
+    imageFilename: 'Quinoa Buddha Bowl.jpg',
+    description: 'Protein-rich quinoa bowl with greens, roasted vegetables, and tahini dressing.',
+    time: '10 min',
+    rating: 4.4,
+  },
+  {
+    id: 8,
+    name: 'Acai Power Bowl',
+    price: 14.50,
+    category: 'healthy',
+    imageFilename: 'Acai Power Bowl.jpg',
+    description: 'Acai blend topped with berries, granola, and chia for an energizing bite.',
+    time: '8 min',
+    rating: 4.5,
+  },
+  {
+    id: 9,
+    name: 'Avocado Poke Bowl',
+    price: 18.00,
+    category: 'healthy',
+    imageFilename: 'Avocado Poke Bowl.jpg',
+    description: 'Fresh poke bowl with avocado, crisp vegetables, and sesame soy glaze.',
+    time: '10 min',
+    rating: 4.6,
+  },
+  {
+    id: 10,
+    name: 'Molten Lava Cake',
+    price: 12.00,
+    category: 'desserts',
+    imageFilename: 'Molten Lava Cake.jpg',
+    description: 'Warm chocolate cake with rich molten center and light cocoa dusting.',
+    time: '12 min',
+    rating: 4.9,
+  },
+  {
+    id: 11,
+    name: 'Crème Brûlée',
+    price: 10.50,
+    category: 'desserts',
+    imageFilename: 'Crème Brûlée.jpg',
+    description: 'Classic vanilla custard topped with a crisp caramelized sugar crust.',
+    time: '10 min',
+    rating: 4.7,
+  },
+  {
+    id: 12,
+    name: 'Tiramisu Tower',
+    price: 13.00,
+    category: 'desserts',
+    imageFilename: 'Tiramisu Tower.jpg',
+    description: 'Layered espresso-soaked sponge with mascarpone cream and cocoa finish.',
+    time: '8 min',
+    rating: 4.8,
+  },
+  {
+    id: 13,
+    name: 'Matcha Latte',
+    price: 6.50,
+    category: 'drinks',
+    imageFilename: 'Matcha Latte.jpg',
+    description: 'Velvety ceremonial-grade matcha whisked with steamed milk.',
+    time: '4 min',
+    rating: 4.3,
+  },
+  {
+    id: 14,
+    name: 'Fresh Mango Smoothie',
+    price: 8.00,
+    category: 'drinks',
+    imageFilename: 'Fresh Mango Smoothie.jpg',
+    description: 'Chilled tropical smoothie blended from ripe mango and citrus.',
+    time: '5 min',
+    rating: 4.5,
+  },
+  {
+    id: 15,
+    name: 'Sparkling Rose Lemonade',
+    price: 7.50,
+    category: 'drinks',
+    imageFilename: 'Sparkling Rose Lemonade.jpg',
+    description: 'Floral sparkling lemonade with rose notes and a bright citrus finish.',
+    time: '3 min',
+    rating: 4.4,
+  },
 ];
 
 // ─── Context ──────────────────────────────────────────────────────────────────
@@ -169,13 +308,20 @@ export function AppProvider({ children }) {
   // ── Add Menu Item (Admin only) ────────────────────────────────────────────
   // [API ENDPOINT]: POST /api/v1/menu
   // [DATA SYNC]: Additions are written to shared context + local storage so Robot and Admin screens stay consistent.
+  // [BACKEND INTEGRATION: TODO] Include description + imageUrl/imagePublicId from backend.
+  // [BACKEND INTEGRATION: TODO] Replace imageFilename with Cloudinary secure URL returned by POST /api/v1/menu/upload-image.
   // ─────────────────────────────────────────────────────────────────────────
   const addMenuItem = useCallback((newItem) => {
     const itemWithId = {
       ...newItem,
-      id:     Date.now(),        // MOCK id — backend assigns real DB id
+      id: Date.now(), // MOCK id — backend assigns real DB id
+      name: newItem.name.trim(),
+      description: (newItem.description || '').trim() || 'Freshly prepared signature dish from AURA kitchen.',
+      imageFilename: isKnownMenuImage(newItem.imageFilename)
+        ? newItem.imageFilename
+        : DEFAULT_MENU_IMAGE_FILENAME,
       rating: 0,
-      time:   newItem.time || '15 min',
+      time: (newItem.time || '15 min').trim() || '15 min',
     };
     setMenuItems((prev) => [...prev, itemWithId]);
     return itemWithId;
