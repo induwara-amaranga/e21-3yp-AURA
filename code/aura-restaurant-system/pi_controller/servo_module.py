@@ -11,12 +11,13 @@ class ServoModule:
     def rotate_to_direction(self, direction):
         angles = {
             "front": 90,
-            "back": 270,
-            "left": 0,
-            "right": 180
+            "back": 180,
+            "left": 30,
+            "right": 150
         }
         
         angle = angles.get(direction, 90)
+        angle = max(0, min(180, angle))
         duty = angle / 18 + 2
         self.pwm.ChangeDutyCycle(duty)
         time.sleep(0.5)

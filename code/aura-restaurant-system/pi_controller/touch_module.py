@@ -3,12 +3,13 @@ import RPi.GPIO as GPIO
 class TouchModule:
     def __init__(self):
         GPIO.setmode(GPIO.BCM)
-        # Touch sensor pins (BCM numbering)
+        # Touch sensor pins (BCM numbering).
+        # Physical header mapping: 31->BCM6, 32->BCM12, 33->BCM13, 37->BCM26.
         self.pins = {
-            31: "front",
-            32: "back",
-            33: "left",
-            37: "right"
+            6: "front",
+            12: "back",
+            13: "left",
+            26: "right"
         }
         for pin in self.pins:
             GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
@@ -18,3 +19,6 @@ class TouchModule:
             if GPIO.input(pin) == GPIO.HIGH:
                 return direction
         return None
+
+    def get_raw_states(self):
+        return {direction: GPIO.input(pin) == GPIO.HIGH for pin, direction in self.pins.items()}

@@ -3,25 +3,47 @@ import RPi.GPIO as GPIO
 from touch_module import TouchModule
 from servo_module import ServoModule
 
+
 def main():
-    # Initialize modules
     touch = TouchModule()
     servo = ServoModule()
 
-    print("Touch and Servo Test Started.")
-    print("Touch a sensor (front/back/left/right) to see the servo rotate.")
-    print("Press Ctrl+C to stop.")
+    print("Touch and Servo Diagnostic Started")
+    print("Wiring expected:")
+    print("  front -> physical pin 31 (BCM 6)")
+    print("  back  -> physical pin 32 (BCM 12)")
+    print("  left  -> physical pin 33 (BCM 13)")
+    print("  right -> physical pin 37 (BCM 26)")
+    print("  servo signal -> physical pin 12 (BCM 18)")
+    print("Press Ctrl+C to stop.\n")
+
+    print("Step 1/2: Servo self-check sweep (front -> left -> right -> back -> front)")
+    for direction in ["front", "left", "right", "back", "front"]:
+        print(f"  moving: {direction}")
+        servo.rotate_to_direction(direction)
+        time.sleep(0.4)
+
+    print("\nStep 2/2: Live touch test")
+    print("Touch one pad at a time. Script prints raw pin states and moves servo.")
 
     try:
+        last_direction = None
+        last_trigger_time = 0.0
+        debounce_seconds = 0.35
+
         while True:
+            raw_states = touch.get_raw_states()
             direction = touch.get_touched_direction()
+
             if direction:
-                print(f"Touch detected: {direction}")
-                servo.rotate_to_direction(direction)
-                print(f"Servo rotated to {direction}")
-                # Small delay to prevent rapid repeated triggers
-                time.sleep(0.5)
-            time.sleep(0.1)  # Polling delay
+                now = time.time()
+                if direction != last_direction or (now - last_trigger_time) > debounce_seconds:
+                    print(f"Touch detected: {direction} | raw={raw_states}")
+                    servo.rotate_to_direction(direction)
+                    last_direction = direction
+                    last_trigger_time = now
+
+            time.sleep(0.08)
     except KeyboardInterrupt:
         print("\nTest stopped by user.")
     finally:
