@@ -6,12 +6,21 @@ import pygame
 
 class AudioModule:
     def __init__(self):
-        pygame.mixer.init()
+        self.enabled = False
+        try:
+            pygame.mixer.init()
+            self.enabled = True
+        except Exception as e:
+            print(f"Audio disabled: {e}")
 
     def speak_text(self, text: str, lang: str = "en"):
         """
         Convert text to speech and play through speaker.
         """
+        if not self.enabled:
+            print(f"AURA speaking (audio disabled): {text}")
+            return
+
         try:
             print(f"AURA speaking: {text}")
 

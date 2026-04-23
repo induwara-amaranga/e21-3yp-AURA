@@ -6,8 +6,6 @@ from dotenv import load_dotenv
 
 GPIO.setmode(GPIO.BCM)
 
-from voice_module import VoiceModule
-from audio_module import AudioModule
 from config import USE_WAKE_WORD, WAKE_WORD
 from touch_module import TouchModule
 from servo_module import ServoModule
@@ -39,10 +37,32 @@ def _touch_worker(touch: TouchModule, servo: ServoModule, stop_event: threading.
 def main():
     gemini_api_key = os.getenv("GEMINI_API_KEY")
 
+    class _SilentAudio:
+        def speak_text(self, text: str):
+            print(f"AURA speaking (audio disabled): {text}")
+
     voice = None
+    audio = _SilentAudio()
+
+    try:
+        from audio_module import AudioModule
+        audio = AudioModule()
+    except ModuleNotFoundError as e:
+        print(f"Audio disabled (missing dependency): {e}")
+        print("Tip: run with venv Python -> ./venv/bin/python main_controller.py")
+    except Exception as e:
+        print(f"Audio disabled (initialization error): {e}")
+
     if gemini_api_key:
-        voice = VoiceModule(gemini_api_key=gemini_api_key)
-    audio = AudioModule()
+        try:
+            from voice_module import VoiceModule
+            voice = VoiceModule(gemini_api_key=gemini_api_key)
+        except ModuleNotFoundError as e:
+            print(f"Voice mode disabled (missing dependency): {e}")
+            print("Tip: run with venv Python -> ./venv/bin/python main_controller.py")
+        except Exception as e:
+            print(f"Voice mode disabled (initialization error): {e}")
+
     touch = TouchModule()
     servo = ServoModule()
     stop_event = threading.Event()
