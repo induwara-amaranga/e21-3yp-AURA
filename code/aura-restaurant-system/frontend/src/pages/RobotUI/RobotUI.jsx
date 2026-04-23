@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import { ChefHat, Flame, Leaf, IceCreamCone, Coffee, UtensilsCrossed, Plus, Minus, ShoppingBag, Send, CreditCard, Trash2, LogOut, Sun, Moon, Lock, X, Clock, Bike, Sparkles, PartyPopper, CheckCircle2, Loader2 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { useRestaurant, ORDER_STATUS } from '../../context/RestaurantContext';
+import { getMenuImageSrc } from '../../utils/menuImages';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const CATS = [
@@ -21,10 +22,10 @@ const STATUS_CFG = {
 };
 
 const UPSELLS = [
-  { menuId: 13, emoji: '🍵', text: 'How about a Matcha Latte?',     price: '$6.50'  },
-  { menuId: 10, emoji: '🍫', text: 'Molten Lava Cake is on fire 🔥', price: '$12.00' },
-  { menuId: 12, emoji: '🍰', text: 'Treat yourself — Tiramisu?',     price: '$13.00' },
-  { menuId: 15, emoji: '🍋', text: 'Sparkling Rose Lemonade?',        price: '$7.50'  },
+  { menuId: 13, text: 'How about a Matcha Latte?',      price: '$6.50'  },
+  { menuId: 10, text: 'Molten Lava Cake is on fire!',   price: '$12.00' },
+  { menuId: 12, text: 'Treat yourself — Tiramisu?',      price: '$13.00' },
+  { menuId: 15, text: 'Sparkling Rose Lemonade?',        price: '$7.50'  },
 ];
 
 const MARKETING_ROTATE_MS = 4500;
@@ -306,7 +307,8 @@ export default function RobotUI() {
         </div>
 
         {/* Menu grid */}
-        {/* [BACKEND INTEGRATION: TODO] GET /api/menu — show skeleton while loading */}
+        {/* [BACKEND INTEGRATION: TODO] GET /api/v1/menu should return imageUrl/imagePublicId + description for each menu item. */}
+        {/* [BACKEND INTEGRATION: TODO] Use backend imageUrl (Cloudinary) instead of local imageFilename once API is ready. */}
         <div className="flex-1 overflow-y-auto px-5 py-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {items.map(item => {
@@ -315,8 +317,13 @@ export default function RobotUI() {
               return (
                 <div key={item.id} id={`mi-${item.id}`}
                   className={`border rounded-2xl overflow-hidden transition-all duration-300 group ${tc.card}`}>
-                  <div className={`h-36 bg-gradient-to-br ${tc.hero} flex items-center justify-center relative`}>
-                    <span className="text-6xl group-hover:scale-110 transition-transform duration-500 select-none">{item.emoji}</span>
+                  <div className={`h-36 bg-gradient-to-br ${tc.hero} relative overflow-hidden`}>
+                    <img
+                      src={getMenuImageSrc(item.imageFilename)}
+                      alt={item.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                    <div className={`absolute inset-0 ${D ? 'bg-black/25' : 'bg-black/10'}`} />
                     <div className={`absolute top-3 right-3 text-xs text-yellow-500 px-2 py-0.5 rounded-full font-medium ${D ? 'bg-black/50' : 'bg-white/80'}`}>
                       ⭐ {item.rating||'New'}
                     </div>
@@ -329,6 +336,9 @@ export default function RobotUI() {
                   </div>
                   <div className="p-4">
                     <h3 className={`font-semibold text-base leading-tight mb-1 truncate ${tc.tt}`}>{item.name}</h3>
+                    <p className={`text-xs leading-5 h-10 overflow-hidden mb-2 ${tc.st}`}>
+                      {item.description || 'Chef crafted signature dish.'}
+                    </p>
                     <div className="flex items-center justify-between mb-4">
                       <span className="text-xl font-bold text-orange-500">${item.price.toFixed(2)}</span>
                       <span className={`text-xs ${tc.mc}`}>⏱ {item.time}</span>
@@ -412,7 +422,11 @@ export default function RobotUI() {
                     </p>
                     {order.items.map((it, idx) => (
                       <div key={idx} className={`flex items-center gap-3 px-3 py-2 rounded-xl border mb-1 ${D ? 'bg-white/[0.03] border-white/5' : 'bg-white border-gray-100'}`}>
-                        <span className="text-lg">{it.emoji}</span>
+                        <img
+                          src={getMenuImageSrc(it.imageFilename)}
+                          alt={it.name}
+                          className="w-10 h-10 rounded-lg object-cover flex-shrink-0 border border-white/10"
+                        />
                         <div className="flex-1 min-w-0">
                           <p className={`text-xs font-medium truncate ${tc.tt}`}>{it.name}</p>
                           <p className={`text-[10px] ${tc.mc}`}>${it.price.toFixed(2)} × {it.quantity}</p>
@@ -445,7 +459,11 @@ export default function RobotUI() {
                 {draft.map(item => (
                   <div key={item.id} id={`dr-${item.id}`}
                     className={`flex items-center gap-3 border rounded-2xl p-3 transition-all group/r shadow-sm ${tc.row}`}>
-                    <span className="text-2xl flex-shrink-0">{item.emoji}</span>
+                    <img
+                      src={getMenuImageSrc(item.imageFilename)}
+                      alt={item.name}
+                      className="w-11 h-11 rounded-xl object-cover flex-shrink-0 border border-white/10"
+                    />
                     <div className="flex-1 min-w-0">
                       <p className={`text-sm font-semibold truncate ${tc.tt}`}>{item.name}</p>
                       <p className={`text-xs ${tc.st}`}>${item.price.toFixed(2)} each</p>
@@ -517,9 +535,16 @@ export default function RobotUI() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-2xl">{currentUpsell.emoji}</span>
+                <img
+                  src={getMenuImageSrc(currentUpsell.menuItem?.imageFilename)}
+                  alt={currentUpsell.menuItem?.name || currentUpsell.text}
+                  className="w-12 h-12 rounded-xl object-cover border border-white/10"
+                />
                 <div className="flex-1 min-w-0">
                   <p className={`text-sm font-semibold truncate ${tc.tt}`}>{currentUpsell.text}</p>
+                  <p className={`text-[11px] truncate ${tc.st}`}>
+                    {currentUpsell.menuItem?.description || 'Chef recommended for this table.'}
+                  </p>
                   <p className="text-xs text-orange-500 font-medium">{currentUpsell.price}</p>
                 </div>
                 <button
