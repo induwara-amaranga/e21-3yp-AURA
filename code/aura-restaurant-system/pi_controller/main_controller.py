@@ -11,7 +11,7 @@ from audio_module import AudioModule
 from config import USE_WAKE_WORD, WAKE_WORD
 from touch_module import TouchModule
 from servo_module import ServoModule
-from oled_module import OLEDModule
+
 load_dotenv()
 
 
