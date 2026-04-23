@@ -1,0 +1,13 @@
+SpeechRecognition
+PyAudio
+pygame
+google-generativeai
+python-dotenv
+gTTS
+paho-mqtt
+opencv-python
+deepface
+luma.oled
+Pillow
+smbus2
+RPi.GPIO
