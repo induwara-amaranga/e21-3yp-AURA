@@ -1,17 +1,22 @@
 import time
 import threading
-import os
 from luma.core.interface.serial import i2c
 from luma.oled.device import ssd1306
 from luma.core.render import canvas
 
 class OLEDModule:
     def __init__(self):
+        self.devices = []
         try:
-            serial = i2c(port=1, address=0x3C)
-            self.device = ssd1306(serial)
+            # Main I2C Bus (Port 1)
+            serial1 = i2c(port=1, address=0x3C)
+            self.devices.append(ssd1306(serial1))
+            
+            # Software I2C Bus (Port 3)
+            serial2 = i2c(port=3, address=0x3C)
+            self.devices.append(ssd1306(serial2))
         except Exception as e:
-            self.device = None
+            print(f"OLED Init Error: {e}")
 
         self.current_direction = "center"
         self.is_blinking = False
@@ -38,8 +43,8 @@ class OLEDModule:
             self._update_display()
 
     def _update_display(self):
-        if self.device:
-            with canvas(self.device) as draw:
+        for device in self.devices:
+            with canvas(device) as draw:
                 state = "closed" if self.is_blinking else "open"
                 self._draw_eyes(draw, state=state, direction=self.current_direction)
 
