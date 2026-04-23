@@ -4,7 +4,8 @@ from dotenv import load_dotenv
 from voice_module import VoiceModule
 from audio_module import AudioModule
 from config import USE_WAKE_WORD, WAKE_WORD
-
+from touch_module import TouchModule
+from servo_module import ServoModule
 
 load_dotenv()
 
@@ -19,7 +20,8 @@ def main():
 
     voice = VoiceModule(gemini_api_key=gemini_api_key)
     audio = AudioModule()
-
+    touch = TouchModule()
+    servo = ServoModule()
     print("AURA voice assistant started.")
 
     if USE_WAKE_WORD:
@@ -29,6 +31,12 @@ def main():
 
     while True:
         try:
+            direction = touch.get_touched_direction()
+            if direction:
+                print(f"Touch detected: {direction}")
+                servo.rotate_to_direction(direction)
+                audio.speak_text(f"Turning {direction}")
+
             if USE_WAKE_WORD:
                 voice.listen_for_wake_word(WAKE_WORD)
                 audio.speak_text("Yes, how can I help you?")
@@ -52,6 +60,8 @@ def main():
         except Exception as e:
             print(f"Main controller error: {e}")
 
+    import RPi.GPIO as GPIO
+    GPIO.cleanup()
 
 if __name__ == "__main__":
     main()
