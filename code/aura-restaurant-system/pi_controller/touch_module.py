@@ -1,3 +1,4 @@
+import os
 import RPi.GPIO as GPIO
 
 class TouchModule:
@@ -11,14 +12,23 @@ class TouchModule:
             13: "left",
             26: "right"
         }
+
+        # Some touch boards are active-high, others are active-low.
+        # Configure with env var TOUCH_ACTIVE_HIGH=1 or 0 (default: 1).
+        self.active_high = os.getenv("TOUCH_ACTIVE_HIGH", "1").strip().lower() in {
+            "1", "true", "yes", "y", "on"
+        }
+        pull_mode = GPIO.PUD_DOWN if self.active_high else GPIO.PUD_UP
+        self.trigger_state = GPIO.HIGH if self.active_high else GPIO.LOW
+
         for pin in self.pins:
-            GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+            GPIO.setup(pin, GPIO.IN, pull_up_down=pull_mode)
 
     def get_touched_direction(self):
         for pin, direction in self.pins.items():
-            if GPIO.input(pin) == GPIO.HIGH:
+            if GPIO.input(pin) == self.trigger_state:
                 return direction
         return None
 
     def get_raw_states(self):
-        return {direction: GPIO.input(pin) == GPIO.HIGH for pin, direction in self.pins.items()}
+        return {direction: GPIO.input(pin) == self.trigger_state for pin, direction in self.pins.items()}

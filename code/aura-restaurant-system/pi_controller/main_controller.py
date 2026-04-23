@@ -1,4 +1,6 @@
 import os
+import time
+import threading
 import RPi.GPIO as GPIO
 from dotenv import load_dotenv
 
@@ -13,6 +15,27 @@ from servo_module import ServoModule
 load_dotenv()
 
 
+def _touch_worker(touch: TouchModule, servo: ServoModule, stop_event: threading.Event):
+    last_direction = None
+    last_trigger_time = 0.0
+    debounce_seconds = 0.35
+
+    while not stop_event.is_set():
+        try:
+            direction = touch.get_touched_direction()
+            if direction:
+                now = time.time()
+                if direction != last_direction or (now - last_trigger_time) > debounce_seconds:
+                    print(f"Touch detected: {direction}")
+                    servo.rotate_to_direction(direction)
+                    last_direction = direction
+                    last_trigger_time = now
+            time.sleep(0.05)
+        except Exception as e:
+            print(f"Touch worker error: {e}")
+            time.sleep(0.2)
+
+
 def main():
     gemini_api_key = os.getenv("GEMINI_API_KEY")
 
@@ -22,6 +45,14 @@ def main():
     audio = AudioModule()
     touch = TouchModule()
     servo = ServoModule()
+    stop_event = threading.Event()
+    touch_thread = threading.Thread(
+        target=_touch_worker,
+        args=(touch, servo, stop_event),
+        daemon=True,
+    )
+    touch_thread.start()
+
     print("AURA voice assistant started.")
 
     if voice and USE_WAKE_WORD:
@@ -31,12 +62,6 @@ def main():
 
     while True:
         try:
-            direction = touch.get_touched_direction()
-            if direction:
-                print(f"Touch detected: {direction}")
-                servo.rotate_to_direction(direction)
-                audio.speak_text(f"Turning {direction}")
-
             if voice:
                 if USE_WAKE_WORD:
                     voice.listen_for_wake_word(WAKE_WORD)
@@ -55,9 +80,8 @@ def main():
                 reply = voice.get_gemini_response(user_text)
                 audio.speak_text(reply)
             else:
-                # For touch testing without voice
-                import time
-                time.sleep(0.1)  # Small delay to prevent busy loop
+                # Touch worker continues running even without voice mode.
+                time.sleep(0.1)
 
         except KeyboardInterrupt:
             print("\nProgram stopped by user.")
@@ -65,6 +89,9 @@ def main():
         except Exception as e:
             print(f"Main controller error: {e}")
 
+    stop_event.set()
+    touch_thread.join(timeout=1.0)
+    servo.cleanup()
     GPIO.cleanup()
 
 if __name__ == "__main__":

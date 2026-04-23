@@ -15,6 +15,10 @@ def main():
     print("  left  -> physical pin 33 (BCM 13)")
     print("  right -> physical pin 37 (BCM 26)")
     print("  servo signal -> physical pin 12 (BCM 18)")
+    print(f"  touch active_high -> {touch.active_high}")
+    print(f"  servo freq -> {servo.frequency_hz} Hz")
+    print(f"  servo pulse range -> {servo.min_pulse_ms}ms to {servo.max_pulse_ms}ms")
+    print(f"  servo hold time -> {servo.move_hold_seconds}s")
     print("Press Ctrl+C to stop.\n")
 
     print("Step 1/2: Servo self-check sweep (front -> left -> right -> back -> front)")
