@@ -2,6 +2,7 @@ import RPi.GPIO as GPIO
 
 class TouchModule:
     def __init__(self):
+        GPIO.setmode(GPIO.BCM)
         # Touch sensor pins (BCM numbering)
         self.pins = {
             31: "front",

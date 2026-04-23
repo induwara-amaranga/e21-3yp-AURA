@@ -1,12 +1,16 @@
+# SpeechRecognition
 SpeechRecognition
+# PyAudio
 PyAudio
+# pygame
 pygame
+# google-generativeai
 google-generativeai
 python-dotenv
 gTTS
 paho-mqtt
-opencv-python
-deepface
+# opencv-python
+# deepface
 luma.oled
 Pillow
 smbus2

@@ -4,7 +4,6 @@ import time
 class ServoModule:
     def __init__(self):
         self.servo_pin = 18 
-        GPIO.setmode(GPIO.BCM)
         GPIO.setup(self.servo_pin, GPIO.OUT)
         self.pwm = GPIO.PWM(self.servo_pin, 50)
         self.pwm.start(0)
