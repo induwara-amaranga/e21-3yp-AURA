@@ -10,8 +10,7 @@ from oled_module import OLEDModule
 from mqtt_client import RobotMqttClient
 from config import USE_WAKE_WORD, WAKE_WORD
 from touch_module import TouchModule
-from servo_module import ServoModule
-
+from stepper_module import StepperModule
 GPIO.setmode(GPIO.BCM)
 load_dotenv()
 
@@ -100,9 +99,9 @@ def main():
 
     ws_thread = threading.Thread(target=start_websocket_server, args=(mqtt_bot,), daemon=True)
     ws_thread.start()
-    
+
     touch = TouchModule()
-    servo = ServoModule()
+    servo = StepperModule()()
     oled = OLEDModule()
     stop_event = threading.Event()
     touch_thread = threading.Thread(
