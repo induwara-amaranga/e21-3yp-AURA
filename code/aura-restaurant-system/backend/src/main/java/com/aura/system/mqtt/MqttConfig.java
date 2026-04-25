@@ -24,7 +24,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 @IntegrationComponentScan
 public class MqttConfig {
 
-    private static final String BROKER_URL = "tcp://127.0.0.1:1883";
+    private static final String BROKER_URL = "tcp://mosquitto:1883";
     private static final String CLIENT_ID_IN  = "aura-server-inbound";
     private static final String CLIENT_ID_OUT = "aura-server-outbound";
 
