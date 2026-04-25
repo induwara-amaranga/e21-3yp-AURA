@@ -1,3 +1,30 @@
+#.....................................................................................................................................................................
+# import sys
+# from unittest.mock import MagicMock
+
+# # Windows වලදී RPi module එක Mock කිරීම
+# try:
+#     import RPi.GPIO
+# except ImportError:
+#     mock_rpi = MagicMock()
+#     sys.modules["RPi"] = mock_rpi
+#     sys.modules["RPi.GPIO"] = mock_rpi.GPIO
+#     print("⚠️ Running in Mock Mode (No Hardware Detected)")
+
+# # මීට අමතරව අනෙකුත් hardware modules වලට එන errors මගහැරීමට:
+# sys.modules["oled_module"] = MagicMock()
+# sys.modules["touch_module"] = MagicMock()
+# sys.modules["stepper_module"] = MagicMock()
+
+# try:
+#     import RPi.GPIO as GPIO
+#     from oled_module import OLEDModule
+#     from touch_module import TouchModule
+#     from stepper_module import StepperModule
+# except ImportError:
+#     # මේවා Mock කර ඇති නිසා දැනට හිස්ව තැබිය හැක
+#     pass
+#.........................................................................................................................................................
 import os
 import time
 import threading
@@ -20,24 +47,92 @@ load_dotenv()
 # Global GPIO Setup
 GPIO.setmode(GPIO.BCM)
 
-async def frontend_handler(websocket, path, mqtt_bot):
-    print("Frontend UI connected via WebSocket.")
+# async def frontend_handler(websocket, path, mqtt_bot):
+#     print("Frontend UI connected via WebSocket.")
+#     try:
+#         async for message in websocket:
+#             try:
+#                 data = json.loads(message)
+#                 if data.get("type") == "PLACE_ORDER":
+#                     table_id = data.get("tableId")
+#                     items = data.get("items", [])
+                    
+#                     # Backend එක බලාපොරොත්තු වන JSON Payload එක
+#                     order_payload = {
+#                         "tableId": table_id,
+#                         "items": items
+#                     }
+                    
+#                     # නිවැරදි MQTT Topic එක සකස් කිරීම (උදා: aura/table/1/order)
+#                     topic = f"aura/table/{table_id}/order"
+                    
+#                     # MQTT Broker එකට පණිවිඩය යැවීම
+#                     mqtt_bot.client.publish(topic, json.dumps(order_payload))
+                    
+#                     print(f"✅ Order Forwarded to Backend via MQTT | Topic: {topic}")
+#                     print(f"📦 Payload: {order_payload}")
+            
+#             except json.JSONDecodeError:
+#                 print("❌ Error: Invalid JSON received from Frontend")
+#             except Exception as e:
+#                 print(f"❌ Error processing frontend message: {e}")
+
+#     except websockets.exceptions.ConnectionClosedError:
+#         print("Frontend UI disconnected.")
+
+
+async def frontend_handler(websocket, mqtt_bot):
+    print("✅ Frontend UI connected via WebSocket.")
     try:
         async for message in websocket:
-            data = json.loads(message)
-            if data.get("type") == "PLACE_ORDER":
-                table_id = data.get("tableId", "1")
-                items = data.get("items", [])
-                mqtt_bot.publish_order(table_id, items)
-    except websockets.exceptions.ConnectionClosedError:
-        print("Frontend UI disconnected.")
+            try:
+                data = json.loads(message)
+                if data.get("type") == "PLACE_ORDER":
+                    table_id = data.get("tableId")
+                    items = data.get("items", [])
+                    
+                    # Backend එක බලාපොරොත්තු වන JSON Payload එක
+                    order_payload = {
+                        "tableId": table_id,
+                        "items": items
+                    }
+                    
+                    # නිවැරදි MQTT Topic එක සකස් කිරීම
+                    topic = f"aura/table/{table_id}/order"
+                    
+                    # MQTT Broker එකට පණිවිඩය යැවීම
+                    mqtt_bot.client.publish(topic, json.dumps(order_payload))
+                    
+                    print(f"🚀 Order Forwarded to Backend | Topic: {topic}")
+                    print(f"📦 Payload: {order_payload}")
+            
+            except json.JSONDecodeError:
+                print("❌ Error: Invalid JSON received from Frontend")
+            except Exception as e:
+                print(f"❌ Error processing frontend message: {e}")
+
+    except websockets.exceptions.ConnectionClosed:
+        print("ℹ️ Frontend UI disconnected.")
+    except Exception as e:
+        print(f"❌ WebSocket connection error: {e}")
+
+# def start_websocket_server(mqtt_bot):
+#     loop = asyncio.new_event_loop()
+#     asyncio.set_event_loop(loop)
+#     start_server = websockets.serve(lambda ws, path: frontend_handler(ws, path, mqtt_bot), "0.0.0.0", 8765)
+#     loop.run_until_complete(start_server)
+#     loop.run_forever()
 
 def start_websocket_server(mqtt_bot):
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    start_server = websockets.serve(lambda ws, path: frontend_handler(ws, path, mqtt_bot), "0.0.0.0", 8765)
-    loop.run_until_complete(start_server)
-    loop.run_forever()
+    async def run_server():
+        # path ඉවත් කර ws පමණක් ලබා දෙන්න
+        async with websockets.serve(lambda ws: frontend_handler(ws, mqtt_bot), "0.0.0.0", 8765):
+            await asyncio.Future() 
+
+    try:
+        asyncio.run(run_server())
+    except Exception as e:
+        print(f"❌ WebSocket Server Error: {e}")
 
 def _touch_worker(touch, servo, oled, stop_event):
     last_direction = None
@@ -74,6 +169,8 @@ def main():
     gemini_api_key = os.getenv("GEMINI_API_KEY")
     
     # --- Initialize Modules ---
+    audio = None
+    voice = None
     try:
         from audio_module import AudioModule
         from voice_module import VoiceModule
@@ -81,7 +178,7 @@ def main():
         voice = VoiceModule(gemini_api_key=gemini_api_key) if gemini_api_key else None
     except Exception as e:
         print(f"Audio/Voice init failed: {e}")
-        return
+        #return
 
     # --- Hardware Initialization ---
     touch = TouchModule()
