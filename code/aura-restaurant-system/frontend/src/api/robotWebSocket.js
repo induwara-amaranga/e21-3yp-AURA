@@ -22,13 +22,23 @@ export const connectToRobot = () => {
 
 export const sendOrderToRobot = (tableId, items) => {
     if (socket && socket.readyState === WebSocket.OPEN) {
+        // 1. "T1" -> 1 ලෙස අංකයක් බවට පත් කිරීම
+        const numericTableId = parseInt(tableId.replace(/\D/g, ""), 10);
+
+        // 2. Backend එක බලාපොරොත්තු වන පරිදි Items සකස් කිරීම
+        const mappedItems = items.map(item => ({
+            menuItemId: item.id, // Frontend එකේ 'id' යනු Backend එකේ 'menuItemId' ය
+            quantity: item.quantity
+        }));
+
         const payload = {
             type: 'PLACE_ORDER',
-            tableId: tableId,
-            items: items
+            tableId: numericTableId,
+            items: mappedItems
         };
+
         socket.send(JSON.stringify(payload));
-        console.log("Order sent to Robot");
+        console.log("Mapped Order sent to Robot:", payload);
     } else {
         console.error("WebSocket is not connected!");
     }
