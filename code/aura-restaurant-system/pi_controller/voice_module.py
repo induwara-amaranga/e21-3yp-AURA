@@ -13,7 +13,7 @@ class VoiceModule:
         self.recognizer.pause_threshold = 0.8
 
         genai.configure(api_key=gemini_api_key)
-        self.model = genai.GenerativeModel("gemini-1.5-flash")
+        self.model = genai.GenerativeModel("models/gemini-flash-latest")
 
     def listen_for_wake_word(self, wake_word: str = "hi aura") -> bool:
         """
@@ -77,22 +77,28 @@ class VoiceModule:
             print(f"Unexpected speech-to-text error: {e}")
             return None
 
-    def get_gemini_response(self, user_text: str) -> str:
+    def get_gemini_response(self, user_text: str, menu_context: str | None = None) -> str:
         """
-        Send user text to Gemini and return AURA's reply.
+        Send user text to Gemini and return AURA's reply, using current menu context when available.
         """
         try:
+            menu_section = ""
+            if menu_context:
+                menu_section = f"Current menu and availability:\n{menu_context}\n\n"
+
             prompt = f"""
 You are AURA, a smart and friendly restaurant robot assistant.
 
 Rules:
 - Reply as AURA.
 - Keep responses short, clear, and polite.
+- Answer only using the current menu information when the user asks about food availability or prices.
+- If the user asks about an item not on the current menu, say it is unavailable.
 - Help with greetings, menu questions, ordering, and table assistance.
 - If unclear, ask a short follow-up question.
 - Do not mention that you are an AI model unless directly asked.
 
-User said: {user_text}
+{menu_section}User said: {user_text}
 """
 
             response = self.model.generate_content(prompt)
