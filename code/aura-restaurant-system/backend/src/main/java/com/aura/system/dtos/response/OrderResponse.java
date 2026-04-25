@@ -13,5 +13,6 @@ public class OrderResponse {
     private String            status;
     private Float             totalAmount;
     private LocalDateTime     orderTime;
+    private LocalDateTime     deliveredAt;
     private List<OrderItemResponse> items;
 }

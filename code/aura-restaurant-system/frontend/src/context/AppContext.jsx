@@ -13,6 +13,8 @@
 
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { DEFAULT_MENU_IMAGE_FILENAME, isKnownMenuImage } from '../utils/menuImages';
+import authAPI from '../api/authAPI';
+import menuAPI from '../api/menuAPI';
 
 const MENU_STORAGE_KEY = 'aura_menu_items';
 const MENU_STORAGE_VER = 2;
@@ -20,15 +22,29 @@ const MENU_STORAGE_VER = 2;
 function loadInitialMenuItems() {
   try {
     const raw = localStorage.getItem(MENU_STORAGE_KEY);
-    if (!raw) return INITIAL_MENU_ITEMS;
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (parsed.__v !== MENU_STORAGE_VER || !Array.isArray(parsed.items)) {
-      return INITIAL_MENU_ITEMS;
+      return [];
     }
     return parsed.items;
   } catch {
-    return INITIAL_MENU_ITEMS;
+    return [];
   }
+}
+
+function normalizeMenuItem(raw) {
+  return {
+    id: raw.id || raw.menuItemId,
+    name: raw.name,
+    description: raw.description || '',
+    price: Number(raw.price) || 0,
+    category: raw.category || 'popular',
+    imageFilename: raw.imageUrl || raw.imageFilename || DEFAULT_MENU_IMAGE_FILENAME,
+    time: raw.prepTime || raw.time || '15 min',
+    rating: raw.rating || 0,
+    available: raw.available ?? raw.availability ?? true,
+  };
 }
 
 // ─── Mock Credentials Map ─────────────────────────────────────────────────────
@@ -223,7 +239,7 @@ export function AppProvider({ children }) {
   const [menuItems, setMenuItems]   = useState(loadInitialMenuItems);
 
   // [API ENDPOINT]: GET /api/v1/menu
-  // [DATA SYNC]: Persist menu state locally so Admin edits remain visible after refresh and in parallel tabs until backend sync is wired.
+  // [DATA SYNC]: Persist menu state locally so Admin edits remain visible after refresh.
   useEffect(() => {
     try {
       localStorage.setItem(
@@ -232,6 +248,27 @@ export function AppProvider({ children }) {
       );
     } catch {}
   }, [menuItems]);
+
+  useEffect(() => {
+    const loadMenu = async () => {
+      try {
+        const rawMenu = await menuAPI.getAllMenuItems();
+        const normalized = rawMenu.map(normalizeMenuItem);
+        setMenuItems(normalized);
+      } catch (error) {
+        console.warn('[AURA] Could not load menu from backend:', error.message || error);
+      }
+    };
+
+    authAPI.restoreToken();
+    const storedUser = localStorage.getItem('authUser');
+    if (storedUser) {
+      try {
+        setSession(JSON.parse(storedUser));
+      } catch {}
+    }
+    loadMenu();
+  }, []);
 
   // [API ENDPOINT]: GET /api/v1/menu
   // [DATA SYNC]: Mirror menu changes from other tabs so Robot UI immediately reflects Admin-added items.
@@ -264,82 +301,101 @@ export function AppProvider({ children }) {
   }, []);
 
   // ── Login ─────────────────────────────────────────────────────────────────
-  // [BACKEND INTEGRATION: TODO] - POST /api/auth/login
-  // Replace with: const res = await axiosInstance.post('/auth/login', { username, password });
-  //               setSession(res.data.user); localStorage.setItem('aura_token', res.data.token);
-  // ─────────────────────────────────────────────────────────────────────────
-  const login = useCallback((username, password) => {
-    setLoginError('');
-    const cred = MOCK_CREDENTIALS[username.trim().toLowerCase()];
-    if (cred && cred.password === password) {
-      setSession({
-        role:        cred.role,
-        tableNumber: cred.tableNumber,
-        displayName: cred.displayName,
-        username:    username.trim().toLowerCase(),
-      });
-      return true;
-    }
-    setLoginError('Invalid username or password. Please try again.');
+const login = useCallback(async (username, password) => {
+  setLoginError('');
+  try {
+    const response = await authAPI.login(username.trim().toLowerCase(), password);
+    
+    // Backend returns flat: { token, username, role, expiresIn }
+    // There is no response.user — map it manually
+    const session = {
+      username: response.username,
+      role: response.role.toLowerCase(), // 'KITCHEN' → 'kitchen'
+      token: response.token,
+    };
+
+    setSession(session);
+    localStorage.setItem('authUser', JSON.stringify(session));
+    return true;
+  } catch (error) {
+    const message = error.response?.data?.message || 'Invalid username or password.';
+    setLoginError(message);
     return false;
-  }, []);
+  }
+}, []);
 
   // ── Verify credentials WITHOUT logging in (used by Secure Logout modal) ──
-  // [BACKEND INTEGRATION: TODO] - POST /api/auth/verify-logout
-  // Description: Validates staff credentials server-side before destroying the
-  //   customer session. Replace mock check below with:
-  //   const res = await axiosInstance.post('/auth/verify-logout', { username, password });
-  //   return res.data.valid; // boolean
-  // ─────────────────────────────────────────────────────────────────────────
+  // NOTE: Backend does not currently expose a verify-logout endpoint,
+  // so this remains a local fallback for the modal flow.
   const verifyCredentials = useCallback((username, password) => {
     const cred = MOCK_CREDENTIALS[username.trim().toLowerCase()];
     return !!(cred && cred.password === password);
   }, []);
 
   // ── Logout ────────────────────────────────────────────────────────────────
-  // [BACKEND INTEGRATION: TODO] - POST /api/auth/logout
-  // Description: Invalidate JWT on backend, clear localStorage token.
-  // ─────────────────────────────────────────────────────────────────────────
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    try {
+      await authAPI.logout();
+    } catch (error) {
+      console.warn('[AURA] Logout failed:', error.message || error);
+    }
     setSession(null);
     setLoginError('');
   }, []);
 
   // ── Add Menu Item (Admin only) ────────────────────────────────────────────
-  // [API ENDPOINT]: POST /api/v1/menu
-  // [DATA SYNC]: Additions are written to shared context + local storage so Robot and Admin screens stay consistent.
-  // [BACKEND INTEGRATION: TODO] Include description + imageUrl/imagePublicId from backend.
-  // [BACKEND INTEGRATION: TODO] Replace imageFilename with Cloudinary secure URL returned by POST /api/v1/menu/upload-image.
-  // ─────────────────────────────────────────────────────────────────────────
-  const addMenuItem = useCallback((newItem) => {
-    const itemWithId = {
-      ...newItem,
-      id: Date.now(), // MOCK id — backend assigns real DB id
+  const addMenuItem = useCallback(async (newItem) => {
+    const itemPayload = {
       name: newItem.name.trim(),
       description: (newItem.description || '').trim() || 'Freshly prepared signature dish from AURA kitchen.',
-      imageFilename: isKnownMenuImage(newItem.imageFilename)
+      price: Number(newItem.price) || 0,
+      category: newItem.category || 'popular',
+      availability: true,
+      imageUrl: newItem.imageFilename && !isKnownMenuImage(newItem.imageFilename)
         ? newItem.imageFilename
-        : DEFAULT_MENU_IMAGE_FILENAME,
-      rating: 0,
-      time: (newItem.time || '15 min').trim() || '15 min',
+        : undefined,
+      prepTimeMinutes: newItem.time || "15 min",
     };
-    setMenuItems((prev) => [...prev, itemWithId]);
-    return itemWithId;
+
+    try {
+      const rawItem = await menuAPI.createMenuItem(itemPayload, null);
+      const itemWithId = normalizeMenuItem(rawItem);
+      setMenuItems((prev) => [...prev, itemWithId]);
+      return itemWithId;
+    } catch (error) {
+      console.error('[AURA] Add menu item failed:', error.response?.data || error.message || error);
+      throw error;
+    }
   }, []);
 
   // ── Delete Menu Item (Admin only) ─────────────────────────────────────────
-  // [API ENDPOINT]: DELETE /api/v1/menu/:id
-  // [DATA SYNC]: Deletes are applied to shared context + local storage to prevent stale menu rows on Robot UI.
-  // ─────────────────────────────────────────────────────────────────────────
-  const deleteMenuItem = useCallback((itemId) => {
-    setMenuItems((prev) => prev.filter((item) => item.id !== itemId));
+  const deleteMenuItem = useCallback(async (itemId) => {
+    try {
+      await menuAPI.deleteMenuItem(itemId);
+      setMenuItems((prev) => prev.filter((item) => item.id !== itemId));
+    } catch (error) {
+      console.error('[AURA] Delete menu item failed:', error.response?.data || error.message || error);
+      throw error;
+    }
+  }, []);
+
+  // ── Refresh Menu Items (from MQTT) ───────────────────────────────────────
+  const refreshMenu = useCallback(async () => {
+    try {
+      const rawMenu = await menuAPI.getAllMenuItems();
+      const normalized = rawMenu.map(normalizeMenuItem);
+      setMenuItems(normalized);
+      console.log('[AURA] Menu refreshed via MQTT');
+    } catch (error) {
+      console.warn('[AURA] Failed to refresh menu:', error.message);
+    }
   }, []);
 
   const value = {
     session, loginError,
     login, logout, verifyCredentials,
     theme, toggleTheme,
-    menuItems, addMenuItem, deleteMenuItem,
+    menuItems, addMenuItem, deleteMenuItem, refreshMenu,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

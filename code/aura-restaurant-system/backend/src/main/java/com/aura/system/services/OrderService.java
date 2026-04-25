@@ -10,4 +10,5 @@ public interface OrderService {
     List<OrderResponse> getOrdersByTable(Integer tableId);
     OrderResponse updateOrderStatus(Integer orderId, String status);
     List<OrderResponse> getAllOrders();
+    List<OrderResponse> getDeliveredHistory(int hours);
 }

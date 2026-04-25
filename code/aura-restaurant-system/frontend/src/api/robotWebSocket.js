@@ -43,3 +43,4 @@ export const sendOrderToRobot = (tableId, items) => {
         console.error("WebSocket is not connected!");
     }
 };
+

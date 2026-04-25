@@ -22,6 +22,9 @@ const fallbackImageSrc =
 
 export function getMenuImageSrc(imageFilename) {
   if (!imageFilename) return fallbackImageSrc;
+  if (typeof imageFilename === 'string' && imageFilename.startsWith('http')) {
+    return imageFilename;
+  }
   return menuImageByFilename[imageFilename] || fallbackImageSrc;
 }
 
