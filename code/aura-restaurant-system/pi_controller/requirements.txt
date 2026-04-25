@@ -1,17 +1,17 @@
-# SpeechRecognition
-SpeechRecognition
-# PyAudio
-PyAudio
-# pygame
-pygame
-# google-generativeai
-google-generativeai
+# --- System ---
 python-dotenv
-gTTS
 paho-mqtt
-# opencv-python
-# deepface
-luma.oled
+websockets
+
+# --- AI & Voice ---
+google-generativeai
+SpeechRecognition
+PyAudio
+pygame
+gTTS
+
+# --- Hardware (Linux/RPi Only) ---
 Pillow
+luma.oled
 smbus2
-RPi.GPIO
+RPi.GPIO; sys_platform == 'linux'

@@ -1,15 +1,18 @@
 import paho.mqtt.client as mqtt
 import json
 import time
+import threading
 from config import MQTT_BROKER, MQTT_PORT
 
 class RobotMqttClient:
     def __init__(self, robot_id="aura_bot_01"):
         self.robot_id = robot_id
         self.client = mqtt.Client(client_id=f"pi_{robot_id}")
-        self.audio = audio_module
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
+
+        self.menu_response = None
+        self.menu_event = threading.Event()
 
     def on_connect(self, client, userdata, flags, rc):
         if rc == 0:
@@ -24,9 +27,29 @@ class RobotMqttClient:
         try:
             payload = json.loads(msg.payload.decode())
             print(f"Message received on {msg.topic}: {payload}")
+
+            if msg.topic.endswith("/menu/response"):
+                self.menu_response = payload
+                self.menu_event.set()
+
             # Logic to handle incoming messages from Backend can be added here
         except Exception as e:
             print(f"Error parsing message: {e}")
+
+    def request_menu(self, table_id="1", timeout=5):
+        """Request the current available menu from the backend over MQTT."""
+        self.menu_event.clear()
+        self.menu_response = None
+
+        topic = f"aura/table/{table_id}/menu"
+        self.client.publish(topic, json.dumps({"request": "menu"}), qos=1)
+        print(f"Requested menu for table {table_id} on {topic}")
+
+        if self.menu_event.wait(timeout):
+            return self.menu_response
+
+        print("Menu request timed out.")
+        return None
 
     def publish_order(self, table_id, items):
         """
