@@ -86,7 +86,7 @@ public class OrderServiceImpl implements OrderService {
         log.info("Order placed | orderId={} | tableId={} | total={}",
                 savedOrder.getOrderId(), table.getTableId(), total);
         try{
-                String topic = "aura/kitchen/new-order";
+                String topic = "aura/kitchen/update-order";
                 String payload = String.format(
                 "{\"orderId\":%d,\"tableId\":%d,\"total\":%.2f,\"items\":%d}",
                 savedOrder.getOrderId(),
@@ -165,6 +165,21 @@ public class OrderServiceImpl implements OrderService {
         log.info("Order {} status: {} → {}", orderId, oldStatus, status.toUpperCase());
 
         List<OrderItem> items = orderItemRepository.findByOrderOrderId(orderId);
+        try {
+                String topic = "aura/kitchen/update-order";
+                String payload = String.format(
+                "{\"orderId\":%d,\"tableId\":%d,\"total\":%.2f,\"items\":%d}",
+                order.getOrderId(),
+                order.getTable().getTableId(),
+                order.getTotalAmount(),
+                items.size()
+                );
+                mqttPublisher.publish(topic, payload);
+                log.info("MQTT message published | topic={} | payload={}", topic, payload);
+
+        } catch (Exception e) {
+                log.error("Failed to publish MQTT message: {}", e.getMessage(), e);
+        }
         return buildResponse(order, items);
     }
 

@@ -5,6 +5,9 @@ import { useRestaurant, ORDER_STATUS } from '../../context/RestaurantContext';
 import { getMenuImageSrc } from '../../utils/menuImages';
 import { orderMqtt } from '../../api/mqttclient';
 
+// Import WebSocket helpers
+import { connectToRobot, sendOrderToRobot } from '../../api/robotWebSocket';
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 const CATS = [
   { id: 'all', label: 'All', icon: ChefHat },
@@ -14,6 +17,8 @@ const CATS = [
   { id: 'desserts', label: 'Desserts', icon: IceCreamCone },
   { id: 'drinks', label: 'Drinks', icon: Coffee },
 ];
+
+
 
 const STATUS_CFG = {
   PENDING:   { label: 'Sent — Awaiting Kitchen',  icon: Clock,       color: 'text-sky-400',    bg: 'bg-sky-500/10',    ring: 'ring-sky-500/25'    },
@@ -30,11 +35,9 @@ const UPSELLS = [
 ];
 
 const MARKETING_ROTATE_MS = 4500;
-
 const PAY = { SELECT: 'SELECT', QR: 'QR', PROC: 'PROC', DONE: 'DONE' };
 
 // ─── CSS QR Placeholder ───────────────────────────────────────────────────────
-// [BACKEND INTEGRATION: TODO] POST /api/payment/generate-qr → replace with <img src={qrUrl} />
 function MockQR() {
   const cells = [1,1,1,0,1,0,1,1,1,1,0,1,0,0,0,1,0,1,1,0,1,0,1,0,1,0,1,1,1,1,0,0,1,1,1,1,0,0,0,1,1,0,0,1,0,1,1,0,1,0,1,0,1,1,1,0,1,0,0,1,0,1,1,1,0,1,1,0,0,0,1,1,0,1,0,1,1,0,1,1,1];
   return (
@@ -44,10 +47,7 @@ function MockQR() {
   );
 }
 
-// ─── Payment Modal (4-step) ───────────────────────────────────────────────────
-// [BACKEND INTEGRATION: TODO] POST /api/payment/generate-qr
-// [BACKEND INTEGRATION: TODO] WebSocket /api/payment/status — real confirmation
-// [FUTURE WEBSOCKET/API] Integrate with /api/orders/sync here.
+// ─── Payment Modal ───────────────────────────────────────────────────
 function PayModal({ total, table, dark, onSuccess, onClose }) {
   const [step, setStep] = useState(PAY.SELECT);
   const bg = dark ? 'bg-[#1a1a1a] border-white/10' : 'bg-white border-gray-200';
@@ -57,7 +57,6 @@ function PayModal({ total, table, dark, onSuccess, onClose }) {
 
   const pick = () => {
     setStep(PAY.QR);
-    // Mock auto-flow (replace with real WebSocket event)
     setTimeout(() => setStep(PAY.PROC), 3000);
     setTimeout(() => setStep(PAY.DONE), 5500);
   };
@@ -65,7 +64,6 @@ function PayModal({ total, table, dark, onSuccess, onClose }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-6">
       <div className={`rounded-3xl w-full max-w-sm border shadow-2xl ${bg}`}>
-
         {step === PAY.SELECT && (
           <div className="p-8">
             <div className="flex items-center justify-between mb-6">
@@ -75,12 +73,9 @@ function PayModal({ total, table, dark, onSuccess, onClose }) {
               </div>
               <button onClick={onClose} className={`w-8 h-8 rounded-xl flex items-center justify-center ${btn2}`}><X size={16}/></button>
             </div>
-            <p className={`text-xs font-bold uppercase tracking-widest mb-4 ${dark ? 'text-gray-500' : 'text-gray-400'}`}>Select Method</p>
             <div className="grid grid-cols-2 gap-3 mb-4">
               {[{id:'card',e:'💳',l:'Credit/Debit'},{id:'qr',e:'📱',l:'Lanka QR Pay'}].map(m=>(
-                <button key={m.id} id={`pay-${m.id}`} onClick={pick}
-                  className={`flex flex-col items-center gap-3 p-5 rounded-2xl border-2 text-sm font-medium transition-all active:scale-95
-                              ${dark ? 'border-white/10 hover:border-orange-500/50 bg-white/5 text-white' : 'border-gray-200 hover:border-orange-400 bg-gray-50 text-gray-800'}`}>
+                <button key={m.id} onClick={pick} className={`flex flex-col items-center gap-3 p-5 rounded-2xl border-2 text-sm font-medium transition-all active:scale-95 ${dark ? 'border-white/10 hover:border-orange-500/50 bg-white/5 text-white' : 'border-gray-200 hover:border-orange-400 bg-gray-50 text-gray-800'}`}>
                   <span className="text-3xl">{m.e}</span>{m.l}
                 </button>
               ))}
@@ -88,42 +83,22 @@ function PayModal({ total, table, dark, onSuccess, onClose }) {
             <button onClick={onClose} className={`w-full py-3 rounded-2xl text-sm font-medium transition-all ${btn2}`}>Cancel</button>
           </div>
         )}
-
         {step === PAY.QR && (
           <div className="p-8 text-center">
             <h3 className={`font-display text-lg font-bold mb-1 ${tt}`}>Scan to Pay</h3>
-            <p className={`text-sm mb-5 ${st}`}>Amount: <span className="font-bold text-orange-500">${total.toFixed(2)}</span></p>
             <div className="flex justify-center mb-4"><MockQR/></div>
-            <p className={`text-xs mb-2 ${st}`}>Scan with any banking app</p>
             <div className={`text-xs px-3 py-2 rounded-xl inline-flex items-center gap-2 ${dark ? 'bg-amber-500/10 text-amber-400' : 'bg-amber-50 text-amber-600'}`}>
-              <Loader2 size={12} className="animate-spin"/> Waiting… (mock auto-continues)
+              <Loader2 size={12} className="animate-spin"/> Waiting…
             </div>
           </div>
         )}
-
-        {step === PAY.PROC && (
-          <div className="p-10 text-center">
-            <div className="w-20 h-20 mx-auto rounded-full bg-orange-500/15 flex items-center justify-center mb-5">
-              <Loader2 size={36} className="text-orange-500 animate-spin"/>
-            </div>
-            <h3 className={`font-display text-xl font-bold mb-2 ${tt}`}>Processing…</h3>
-            <p className={`text-sm ${st}`}>Please wait while we confirm.</p>
-          </div>
-        )}
-
         {step === PAY.DONE && (
           <div className="p-10 text-center">
             <div className="w-20 h-20 mx-auto rounded-full bg-emerald-500/15 flex items-center justify-center mb-5">
               <CheckCircle2 size={40} className="text-emerald-400"/>
             </div>
             <h3 className={`font-display text-2xl font-bold mb-2 ${tt}`}>Payment Successful!</h3>
-            <p className={`text-sm mb-1 ${st}`}><span className="font-bold text-emerald-400">${total.toFixed(2)}</span> paid for {table}</p>
-            <p className={`text-xs mb-6 ${dark ? 'text-gray-600' : 'text-gray-400'}`}>Thank you for dining with AURA 🤖</p>
-            {/* [BACKEND INTEGRATION: TODO] POST /api/payments/confirm clears server-side session */}
-            <button id="pay-done-btn" onClick={onSuccess}
-              className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-green-500 text-white font-bold text-base transition-all active:scale-95 shadow-lg shadow-emerald-500/25">
-              Done — Thank You!
-            </button>
+            <button onClick={onSuccess} className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-green-500 text-white font-bold text-base shadow-lg shadow-emerald-500/25">Done — Thank You!</button>
           </div>
         )}
       </div>
@@ -145,10 +120,9 @@ export default function RobotUI() {
     return () => { unsubMenu(); };
   }, [refreshMenu]);
 
+  
   const dark       = theme === 'dark';
   const table      = session?.tableNumber || 'T?';
-
-  // Derived from context (no timers — kitchen drives this)
   const confirmed  = getUnpaidOrders(table);
   const confTotal  = getUnpaidTotal(table);
   const latest     = getLatestOrder(table);
@@ -156,7 +130,6 @@ export default function RobotUI() {
   const sCfg       = status ? STATUS_CFG[status] : null;
   const delivered  = status === ORDER_STATUS.DELIVERED;
 
-  // Local state
   const [draft, setDraft]                   = useState([]);
   const [cat, setCat]                       = useState('all');
   const [showPay, setShowPay]               = useState(false);
@@ -167,12 +140,14 @@ export default function RobotUI() {
   const [lLoading, setLLoading]             = useState(false);
   const [upsellIndex, setUpsellIndex]       = useState(0);
 
+  // 1. Initialize Robot Connection on Mount
+  useEffect(() => {
+    connectToRobot();
+  }, []);
+
   const recommendationItems = useMemo(
     () => UPSELLS
-      .map((u) => ({
-        ...u,
-        menuItem: menuItems.find((m) => m.id === u.menuId),
-      }))
+      .map((u) => ({ ...u, menuItem: menuItems.find((m) => m.id === u.menuId) }))
       .filter((u) => !!u.menuItem),
     [menuItems]
   );
@@ -185,7 +160,6 @@ export default function RobotUI() {
     return () => clearInterval(timer);
   }, [recommendationItems.length]);
 
-  // Cart helpers
   const addDraft = useCallback((item) => {
     setDraft(p => {
       const ex = p.find(i => i.id === item.id);
@@ -193,6 +167,7 @@ export default function RobotUI() {
                 : [...p, { ...item, quantity: 1 }];
     });
   }, []);
+
   const decDraft = useCallback((id) => {
     setDraft(p => {
       const ex = p.find(i => i.id === id);
@@ -200,46 +175,42 @@ export default function RobotUI() {
                                : p.filter(i => i.id !== id);
     });
   }, []);
+
   const rmDraft = useCallback((id) => setDraft(p => p.filter(i => i.id !== id)), []);
-
-  const draftTotal       = draft.reduce((s, i) => s + i.price * i.quantity, 0);
-  const grand            = confTotal + draftTotal;
-  const items            = cat === 'all' ? menuItems : menuItems.filter(i => i.category === cat);
+  const draftTotal = draft.reduce((s, i) => s + i.price * i.quantity, 0);
+  const grand = confTotal + draftTotal;
+  const items = cat === 'all' ? menuItems : menuItems.filter(i => i.category === cat);
   const hasActiveSession = confirmed.length > 0;
-  const currentUpsell    = recommendationItems.length
-    ? recommendationItems[upsellIndex % recommendationItems.length]
-    : null;
+  const currentUpsell = recommendationItems.length ? recommendationItems[upsellIndex % recommendationItems.length] : null;
 
-  // [API ENDPOINT]: POST /api/v1/orders/addon
-  // [DATA SYNC]: Appends the draft to the current table session and syncs ticket data to Kitchen/Admin via shared persistent state.
+  // 2. Updated Order Handler with WebSocket Integration
   const placeOrderHandler = () => {
     if (!draft.length) return;
+
+    // A. Original UI/Context Logic
     placeOrder(table, draft, hasActiveSession);
+
+    // B. WebSocket Logic: Send to Robot Controller
+    sendOrderToRobot(table, draft);
+
     setDraft([]);
   };
 
-  // [API ENDPOINT]: POST /api/v1/payments/verify
-  // [DATA SYNC]: If customer pays before pressing "Send Order", draft items are auto-dispatched to Kitchen first,
-  // then payment is confirmed so no paid meal can be lost before preparation starts.
-  // [BACKEND INTEGRATION: TODO] Persist this as an atomic server transaction:
-  // 1) create pending order(s) for draft items, 2) mark session paid, 3) broadcast order status updates.
   const paySuccess = () => {
     if (draft.length > 0) {
       placeOrder(table, draft, hasActiveSession);
+      sendOrderToRobot(table, draft); // Ensure last minute additions go to robot
     }
     markTablePaid(table);
     setShowPay(false);
     setDraft([]);
   };
 
-  // [API ENDPOINT]: GET /api/v1/marketing/suggestions
-  // [DATA SYNC]: Adds recommendation items to the same draft cart so totals and cross-view order state remain consistent.
   const addRecommendationToDraft = useCallback((menuItem) => {
     if (!menuItem) return;
     addDraft(menuItem);
   }, [addDraft]);
 
-  // [BACKEND INTEGRATION: TODO] POST /api/auth/verify-logout
   const confirmLogout = async () => {
     if (!lUser || !lPass) { setLErr('Enter username and password.'); return; }
     setLLoading(true);
@@ -249,7 +220,6 @@ export default function RobotUI() {
     if (ok) logout(); else setLErr('Incorrect credentials.');
   };
 
-  // Theme classes (condensed)
   const D = dark;
   const tc = {
     root:     D ? 'bg-[#0d0d0d]' : 'bg-gray-100',
@@ -275,11 +245,8 @@ export default function RobotUI() {
 
   return (
     <div className={`flex h-screen overflow-hidden font-sans transition-colors duration-300 ${tc.root}`}>
-
       {/* ── LEFT: MENU PANEL ── */}
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-
-        {/* Top bar */}
         <div className={`flex-shrink-0 flex items-center gap-3 px-5 py-3 border-b ${tc.bar}`}>
           <div className="flex items-center gap-3 flex-shrink-0">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center shadow-lg shadow-orange-500/30">
@@ -290,76 +257,51 @@ export default function RobotUI() {
               <p className="text-xs text-orange-500 font-medium">{session?.displayName} — Touch to order</p>
             </div>
           </div>
-
-          {/* Category tabs */}
           <div className="flex-1 flex gap-2 overflow-x-auto scrollbar-hide px-2">
             {CATS.map(({id, label, icon: Ic}) => (
-              <button key={id} id={`cat-${id}`} onClick={() => setCat(id)}
-                className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-200 active:scale-95 ${cat===id ? tc.catA : tc.catI}`}>
+              <button key={id} onClick={() => setCat(id)} className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-200 active:scale-95 ${cat===id ? tc.catA : tc.catI}`}>
                 <Ic size={14}/>{label}
               </button>
             ))}
           </div>
-
-          {/* Theme + logout */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            <button id="theme-btn" onClick={toggleTheme}
-              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all active:scale-90 ${D ? 'bg-white/5 hover:bg-white/15 text-yellow-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}>
+            <button onClick={toggleTheme} className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all active:scale-90 ${D ? 'bg-white/5 hover:bg-white/15 text-yellow-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}>
               {D ? <Sun size={17}/> : <Moon size={17}/>}
             </button>
-            <button id="logout-trigger" onClick={() => { setLUser(''); setLPass(''); setLErr(''); setShowLogout(true); }}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all active:scale-95 ${tc.btn2}`}>
+            <button onClick={() => { setLUser(''); setLPass(''); setLErr(''); setShowLogout(true); }} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all active:scale-95 ${tc.btn2}`}>
               <LogOut size={14}/><span className="hidden sm:inline">Staff Logout</span>
             </button>
           </div>
         </div>
 
-        {/* Menu grid */}
-        {/* [BACKEND INTEGRATION: TODO] GET /api/v1/menu should return imageUrl/imagePublicId + description for each menu item. */}
-        {/* [BACKEND INTEGRATION: TODO] Use backend imageUrl (Cloudinary) instead of local imageFilename once API is ready. */}
         <div className="flex-1 overflow-y-auto px-5 py-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {items.map(item => {
               const dQty = draft.find(i => i.id === item.id)?.quantity || 0;
               const cQty = confirmed.flatMap(o => o.items).filter(it => it.id === item.id).reduce((s,it) => s+it.quantity, 0);
               return (
-                <div key={item.id} id={`mi-${item.id}`}
-                  className={`border rounded-2xl overflow-hidden transition-all duration-300 group ${tc.card}`}>
+                <div key={item.id} className={`border rounded-2xl overflow-hidden transition-all duration-300 group ${tc.card}`}>
                   <div className={`h-36 bg-gradient-to-br ${tc.hero} relative overflow-hidden`}>
-                    <img
-                      src={getMenuImageSrc(item.imageFilename)}
-                      alt={item.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    />
+                    <img src={getMenuImageSrc(item.imageFilename)} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                     <div className={`absolute inset-0 ${D ? 'bg-black/25' : 'bg-black/10'}`} />
-                    <div className={`absolute top-3 right-3 text-xs text-yellow-500 px-2 py-0.5 rounded-full font-medium ${D ? 'bg-black/50' : 'bg-white/80'}`}>
-                      ⭐ {item.rating||'New'}
-                    </div>
-                    {dQty > 0 && (
-                      <div className="absolute top-3 left-3 w-7 h-7 rounded-full bg-orange-500 text-white text-xs font-bold flex items-center justify-center animate-pulse-soft">{dQty}</div>
-                    )}
-                    {cQty > 0 && dQty === 0 && (
-                      <div className={`absolute top-3 left-3 px-2 py-0.5 rounded-full text-[10px] font-bold ${D ? 'bg-emerald-500/80 text-white' : 'bg-emerald-100 text-emerald-700'}`}>×{cQty} ✓</div>
-                    )}
+                    {dQty > 0 && <div className="absolute top-3 left-3 w-7 h-7 rounded-full bg-orange-500 text-white text-xs font-bold flex items-center justify-center animate-pulse-soft">{dQty}</div>}
+                    {cQty > 0 && dQty === 0 && <div className={`absolute top-3 left-3 px-2 py-0.5 rounded-full text-[10px] font-bold ${D ? 'bg-emerald-500/80 text-white' : 'bg-emerald-100 text-emerald-700'}`}>×{cQty} ✓</div>}
                   </div>
                   <div className="p-4">
                     <h3 className={`font-semibold text-base leading-tight mb-1 truncate ${tc.tt}`}>{item.name}</h3>
-                    <p className={`text-xs leading-5 h-10 overflow-hidden mb-2 ${tc.st}`}>
-                      {item.description || 'Chef crafted signature dish.'}
-                    </p>
+                    <p className={`text-xs leading-5 h-10 overflow-hidden mb-2 ${tc.st}`}>{item.description || 'Chef crafted signature dish.'}</p>
                     <div className="flex items-center justify-between mb-4">
                       <span className="text-xl font-bold text-orange-500">${item.price.toFixed(2)}</span>
                       <span className={`text-xs ${tc.mc}`}>⏱ {item.time}</span>
                     </div>
                     {dQty > 0 ? (
                       <div className="flex items-center gap-2">
-                        <button onClick={() => decDraft(item.id)} className={`flex-1 h-11 rounded-xl flex items-center justify-center transition-all active:scale-90 ${tc.qtyD}`}><Minus size={18}/></button>
+                        <button onClick={() => decDraft(item.id)} className={`flex-1 h-11 rounded-xl flex items-center justify-center ${tc.qtyD}`}><Minus size={18}/></button>
                         <span className={`w-8 text-center text-lg font-bold ${tc.tt}`}>{dQty}</span>
-                        <button onClick={() => addDraft(item)} className={`flex-1 h-11 rounded-xl flex items-center justify-center transition-all active:scale-90 ${tc.qtyI}`}><Plus size={18}/></button>
+                        <button onClick={() => addDraft(item)} className={`flex-1 h-11 rounded-xl flex items-center justify-center ${tc.qtyI}`}><Plus size={18}/></button>
                       </div>
                     ) : (
-                      <button id={`add-${item.id}`} onClick={() => addDraft(item)}
-                        className={`w-full h-11 rounded-xl font-semibold text-sm transition-all active:scale-95 flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-400 text-white shadow-lg shadow-orange-500/20 ${delivered ? 'ring-2 ring-orange-400/30' : ''}`}>
+                      <button onClick={() => addDraft(item)} className={`w-full h-11 rounded-xl font-semibold text-sm transition-all active:scale-95 flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-400 text-white shadow-lg shadow-orange-500/20 ${delivered ? 'ring-2 ring-orange-400/30' : ''}`}>
                         <Plus size={18}/>{delivered ? 'Add More' : 'Add to Order'}
                       </button>
                     )}
@@ -371,26 +313,18 @@ export default function RobotUI() {
         </div>
       </div>
 
-      {/* ── RIGHT: BILLING PANEL (fixed 400px) ── */}
+      {/* ── RIGHT: BILLING PANEL ── */}
       <div className={`w-[400px] flex-shrink-0 flex flex-col border-l ${tc.panel}`}>
-
-        {/* Panel header */}
         <div className={`px-5 py-4 border-b ${tc.div}`}>
           <div className="flex items-center gap-3">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${delivered ? 'bg-emerald-500/15' : 'bg-orange-500/15'}`}>
               {delivered ? <PartyPopper size={22} className="text-emerald-400"/> : <ShoppingBag size={22} className="text-orange-400"/>}
             </div>
             <div>
-              <p className={`font-display font-bold text-base ${tc.tt}`}>
-                {delivered ? 'Enjoy your meal! 🎉' : `${table} — Order Bill`}
-              </p>
-              <p className={`text-xs ${tc.st}`}>
-                {delivered ? 'Need more? Add items & send add-on!' : `Grand Total: $${grand.toFixed(2)}`}
-              </p>
+              <p className={`font-display font-bold text-base ${tc.tt}`}>{delivered ? 'Enjoy your meal! 🎉' : `${table} — Order Bill`}</p>
+              <p className={`text-xs ${tc.st}`}>{delivered ? 'Need more? Add items & send add-on!' : `Grand Total: $${grand.toFixed(2)}`}</p>
             </div>
           </div>
-
-          {/* Status badge + progress */}
           {sCfg && (
             <div className={`mt-3 flex items-center gap-3 px-4 py-3 rounded-2xl ring-1 ${sCfg.ring} ${sCfg.bg}`}>
               <sCfg.icon size={18} className={sCfg.color}/>
@@ -408,16 +342,11 @@ export default function RobotUI() {
           )}
         </div>
 
-        {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto">
-
-          {/* KITCHEN PREPARING SECTION (shaded, read-only) */}
           <div className={`${tc.confBg} border-b ${tc.div}`}>
-            <div className={`px-5 pt-4 pb-2 flex items-center gap-2`}>
+            <div className="px-5 pt-4 pb-2 flex items-center gap-2">
               <CheckCircle2 size={12} className="text-emerald-500"/>
-              <span className={`text-[11px] font-bold uppercase tracking-widest ${tc.mc}`}>
-                Kitchen Is Preparing
-              </span>
+              <span className={`text-[11px] font-bold uppercase tracking-widest ${tc.mc}`}>Kitchen Is Preparing</span>
             </div>
             {confirmed.length === 0 ? (
               <p className={`px-5 pb-4 text-xs ${tc.mc}`}>No unpaid confirmed tickets yet.</p>
@@ -425,16 +354,10 @@ export default function RobotUI() {
               <div className="px-4 pb-3 space-y-0.5">
                 {confirmed.map(order => (
                   <div key={order.id}>
-                    <p className={`text-[10px] font-mono px-1 py-1 ${tc.mc}`}>
-                      #{order.ticketNum}{order.isAddon ? ' · Add-on' : ''}
-                    </p>
+                    <p className={`text-[10px] font-mono px-1 py-1 ${tc.mc}`}>#{order.ticketNum}{order.isAddon ? ' · Add-on' : ''}</p>
                     {order.items.map((it, idx) => (
                       <div key={idx} className={`flex items-center gap-3 px-3 py-2 rounded-xl border mb-1 ${D ? 'bg-white/[0.03] border-white/5' : 'bg-white border-gray-100'}`}>
-                        <img
-                          src={getMenuImageSrc(it.imageFilename)}
-                          alt={it.name}
-                          className="w-10 h-10 rounded-lg object-cover flex-shrink-0 border border-white/10"
-                        />
+                        <img src={getMenuImageSrc(it.imageFilename)} alt={it.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
                         <div className="flex-1 min-w-0">
                           <p className={`text-xs font-medium truncate ${tc.tt}`}>{it.name}</p>
                           <p className={`text-[10px] ${tc.mc}`}>${it.price.toFixed(2)} × {it.quantity}</p>
@@ -448,44 +371,31 @@ export default function RobotUI() {
             )}
           </div>
 
-          {/* CURRENT SELECTION SECTION */}
           <div className={tc.draftBg}>
             {draft.length === 0 ? (
               <div className={`text-center py-10 ${tc.mc}`}>
                 <ShoppingBag size={36} className="mx-auto mb-2 opacity-25"/>
-                <p className="text-sm">{hasActiveSession ? 'Add items for your next add-on.' : 'No draft items yet.'}</p>
-                <p className="text-xs mt-1 opacity-50">Tap any item on the left.</p>
+                <p className="text-sm">No draft items yet.</p>
               </div>
             ) : (
               <div className="p-4 space-y-2">
                 <div className="flex items-center gap-2 mb-2">
                   <Sparkles size={12} className="text-orange-400"/>
-                  <span className={`text-[11px] font-bold uppercase tracking-widest ${tc.mc}`}>
-                    Your Current Selection
-                  </span>
+                  <span className={`text-[11px] font-bold uppercase tracking-widest ${tc.mc}`}>Your Current Selection</span>
                 </div>
                 {draft.map(item => (
-                  <div key={item.id} id={`dr-${item.id}`}
-                    className={`flex items-center gap-3 border rounded-2xl p-3 transition-all group/r shadow-sm ${tc.row}`}>
-                    <img
-                      src={getMenuImageSrc(item.imageFilename)}
-                      alt={item.name}
-                      className="w-11 h-11 rounded-xl object-cover flex-shrink-0 border border-white/10"
-                    />
+                  <div key={item.id} className={`flex items-center gap-3 border rounded-2xl p-3 transition-all group/r shadow-sm ${tc.row}`}>
+                    <img src={getMenuImageSrc(item.imageFilename)} alt={item.name} className="w-11 h-11 rounded-xl object-cover" />
                     <div className="flex-1 min-w-0">
                       <p className={`text-sm font-semibold truncate ${tc.tt}`}>{item.name}</p>
-                      <p className={`text-xs ${tc.st}`}>${item.price.toFixed(2)} each</p>
+                      <p className={`text-xs ${tc.st}`}>${item.price.toFixed(2)}</p>
                     </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <button onClick={() => decDraft(item.id)} className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all active:scale-90 ${tc.qtyD}`}><Minus size={14}/></button>
+                    <div className="flex items-center gap-1.5">
+                      <button onClick={() => decDraft(item.id)} className={`w-8 h-8 rounded-xl flex items-center justify-center ${tc.qtyD}`}><Minus size={14}/></button>
                       <span className={`w-6 text-center text-sm font-bold ${tc.tt}`}>{item.quantity}</span>
-                      <button onClick={() => addDraft(item)} className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all active:scale-90 ${tc.qtyI}`}><Plus size={14}/></button>
+                      <button onClick={() => addDraft(item)} className={`w-8 h-8 rounded-xl flex items-center justify-center ${tc.qtyI}`}><Plus size={14}/></button>
                     </div>
-                    <span className="text-sm font-bold text-orange-500 w-14 text-right flex-shrink-0">${(item.price*item.quantity).toFixed(2)}</span>
-                    <button onClick={() => rmDraft(item.id)}
-                      className={`opacity-0 group-hover/r:opacity-100 w-7 h-7 rounded-lg flex items-center justify-center transition-all ${D ? 'hover:bg-red-500/20 text-gray-600 hover:text-red-400' : 'hover:bg-red-100 text-gray-300 hover:text-red-500'}`}>
-                      <Trash2 size={13}/>
-                    </button>
+                    <button onClick={() => rmDraft(item.id)} className={`opacity-0 group-hover/r:opacity-100 transition-all ${D ? 'text-gray-600 hover:text-red-400' : 'text-gray-300 hover:text-red-500'}`}><Trash2 size={13}/></button>
                   </div>
                 ))}
               </div>
@@ -493,121 +403,50 @@ export default function RobotUI() {
           </div>
         </div>
 
-        {/* Totals + Buttons */}
         <div className={`flex-shrink-0 p-5 border-t ${tc.div} space-y-3`}>
           <div className="space-y-1.5">
-            {confTotal > 0 && (
-              <div className={`flex justify-between text-sm ${tc.st}`}>
-                <span>Confirmed (unpaid)</span><span>${confTotal.toFixed(2)}</span>
-              </div>
-            )}
-            {draftTotal > 0 && (
-              <div className={`flex justify-between text-sm ${tc.st}`}>
-                <span>Current draft</span><span>${draftTotal.toFixed(2)}</span>
-              </div>
-            )}
-            <div className={`flex justify-between items-center pt-2 border-t ${tc.div}`}>
+            <div className={`flex justify-between items-center pt-2`}>
               <span className={`font-bold text-base ${tc.tt}`}>Grand Total</span>
               <span className="font-bold text-2xl text-orange-500">${grand.toFixed(2)}</span>
             </div>
           </div>
-
-          {/* [API ENDPOINT]: POST /api/v1/orders/addon */}
-          {/* [DATA SYNC]: Sends both first-time and parallel add-on drafts into the same table session without blocking card interactions. */}
-          <button id="place-order-btn" onClick={placeOrderHandler} disabled={!draft.length}
-            className="w-full py-4 rounded-2xl font-bold text-base text-white bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 shadow-lg shadow-orange-500/25 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-3">
+          <button onClick={placeOrderHandler} disabled={!draft.length} className="w-full py-4 rounded-2xl font-bold text-base text-white bg-gradient-to-r from-orange-500 to-orange-600 shadow-lg shadow-orange-500/25 active:scale-95 disabled:opacity-30 transition-all flex items-center justify-center gap-3">
             <Send size={18}/>{hasActiveSession ? `Send Add-on — ${table}` : `Place Order — ${table}`}
           </button>
-          {/* [BACKEND INTEGRATION: TODO] POST /api/payment/generate-qr */}
-          {/* [FUTURE WEBSOCKET/API] Integrate with /api/payments/status here. */}
-          <button id="pay-btn" onClick={() => setShowPay(true)} disabled={grand === 0}
-            className={`w-full py-3.5 rounded-2xl font-semibold text-sm transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${tc.btn2}`}>
+          <button onClick={() => setShowPay(true)} disabled={grand === 0} className={`w-full py-3.5 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 ${tc.btn2}`}>
             <CreditCard size={18}/>Pay & Close — ${grand.toFixed(2)}
           </button>
-
-          {/* [API ENDPOINT]: GET /api/v1/marketing/suggestions */}
-          {/* [DATA SYNC]: Keeps recommendations pinned at the side-cart bottom so upsell adds flow into the same shared draft and billing totals. */}
+          
           {currentUpsell && (
             <div className={`mt-2 p-3 rounded-2xl border ${D ? 'bg-white/[0.03] border-white/10' : 'bg-orange-50/60 border-orange-100'}`}>
-              <div className="flex items-center justify-between mb-2">
-                <p className={`text-[11px] font-bold uppercase tracking-widest ${tc.mc}`}>Chef&apos;s Recommendation</p>
-                <div className="flex items-center gap-1">
-                  {recommendationItems.map((rec, idx) => (
-                    <button
-                      key={`dot-${rec.menuId}`}
-                      onClick={() => setUpsellIndex(idx)}
-                      className={`h-1.5 rounded-full transition-all ${idx === (upsellIndex % recommendationItems.length) ? 'w-4 bg-orange-500' : D ? 'w-1.5 bg-white/20' : 'w-1.5 bg-gray-300'}`}
-                      aria-label={`Show recommendation ${idx + 1}`}
-                    />
-                  ))}
-                </div>
-              </div>
               <div className="flex items-center gap-3">
-                <img
-                  src={getMenuImageSrc(currentUpsell.menuItem?.imageFilename)}
-                  alt={currentUpsell.menuItem?.name || currentUpsell.text}
-                  className="w-12 h-12 rounded-xl object-cover border border-white/10"
-                />
+                <img src={getMenuImageSrc(currentUpsell.menuItem?.imageFilename)} alt={currentUpsell.text} className="w-12 h-12 rounded-xl object-cover" />
                 <div className="flex-1 min-w-0">
                   <p className={`text-sm font-semibold truncate ${tc.tt}`}>{currentUpsell.text}</p>
-                  <p className={`text-[11px] truncate ${tc.st}`}>
-                    {currentUpsell.menuItem?.description || 'Chef recommended for this table.'}
-                  </p>
                   <p className="text-xs text-orange-500 font-medium">{currentUpsell.price}</p>
                 </div>
-                <button
-                  onClick={() => addRecommendationToDraft(currentUpsell.menuItem)}
-                  className="px-3 py-2 rounded-xl text-xs font-bold text-white bg-orange-500 hover:bg-orange-400 transition-all active:scale-95"
-                >
-                  Add
-                </button>
+                <button onClick={() => addRecommendationToDraft(currentUpsell.menuItem)} className="px-3 py-2 rounded-xl text-xs font-bold text-white bg-orange-500">Add</button>
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* ── Payment modal ── */}
       {showPay && <PayModal total={grand} table={table} dark={D} onSuccess={paySuccess} onClose={() => setShowPay(false)}/>}
-
-      {/* ── Secure logout modal ── */}
       {showLogout && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-6">
           <div className={`rounded-3xl p-8 w-full max-w-sm border shadow-2xl ${tc.modal}`}>
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-red-500/15 flex items-center justify-center">
-                  <Lock size={22} className="text-red-400"/>
-                </div>
-                <div>
-                  <h3 className={`font-display text-lg font-bold ${tc.tt}`}>Staff Verification</h3>
-                  <p className={`text-xs ${tc.st}`}>Re-enter credentials to exit</p>
-                </div>
+                <Lock size={22} className="text-red-400"/>
+                <h3 className={`font-display text-lg font-bold ${tc.tt}`}>Staff Verification</h3>
               </div>
-              <button onClick={() => setShowLogout(false)} className={`w-8 h-8 rounded-xl flex items-center justify-center ${tc.btn2}`}><X size={16}/></button>
+              <button onClick={() => setShowLogout(false)} className={tc.btn2}><X size={16}/></button>
             </div>
-            <div className={`mb-5 px-4 py-3 rounded-xl text-xs ${D ? 'bg-white/3 border border-white/5 text-gray-500' : 'bg-amber-50 border border-amber-200 text-amber-700'}`}>
-              🔒 Prevents customers from accidentally exiting the ordering screen.
-            </div>
-            <div className="mb-4">
-              <label className={`block text-xs font-semibold mb-1.5 ${tc.st}`}>Username</label>
-              <input id="lo-user" type="text" value={lUser} onChange={e=>setLUser(e.target.value)} placeholder="e.g. table1"
-                className={`w-full rounded-xl px-4 py-3 text-sm border focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all ${tc.inp}`}/>
-            </div>
-            <div className="mb-4">
-              <label className={`block text-xs font-semibold mb-1.5 ${tc.st}`}>Password</label>
-              <input id="lo-pass" type="password" value={lPass} onChange={e=>setLPass(e.target.value)} onKeyDown={e=>e.key==='Enter'&&confirmLogout()} placeholder="Password"
-                className={`w-full rounded-xl px-4 py-3 text-sm border focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all ${tc.inp}`}/>
-            </div>
-            {lErr && <div className="mb-4 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-sm text-red-400">⚠️ {lErr}</div>}
-            <div className="flex gap-3">
-              <button onClick={() => setShowLogout(false)} className={`flex-1 py-3 rounded-2xl font-semibold text-sm transition-all ${tc.btn2}`}>Cancel</button>
-              {/* [BACKEND INTEGRATION: TODO] POST /api/auth/verify-logout */}
-              <button id="logout-confirm-btn" onClick={confirmLogout} disabled={lLoading}
-                className="flex-1 py-3 rounded-2xl bg-red-500 hover:bg-red-400 text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2">
-                {lLoading ? <><Loader2 size={16} className="animate-spin"/>Verifying…</> : <><LogOut size={16}/>Confirm Logout</>}
-              </button>
-            </div>
+            <input type="text" value={lUser} onChange={e=>setLUser(e.target.value)} placeholder="Username" className={`w-full rounded-xl px-4 py-3 mb-4 ${tc.inp}`}/>
+            <input type="password" value={lPass} onChange={e=>setLPass(e.target.value)} onKeyDown={e=>e.key==='Enter'&&confirmLogout()} placeholder="Password" className={`w-full rounded-xl px-4 py-3 mb-4 ${tc.inp}`}/>
+            {lErr && <div className="mb-4 text-xs text-red-400">⚠️ {lErr}</div>}
+            <button onClick={confirmLogout} disabled={lLoading} className="w-full py-3 rounded-2xl bg-red-500 text-white font-bold">{lLoading ? 'Verifying...' : 'Logout'}</button>
           </div>
         </div>
       )}

@@ -35,7 +35,7 @@ class KitchenMqttService {
         const data = JSON.parse(message.toString());
         console.log('📦 MQTT message received:', topic, data);
 
-        if (topic === 'aura/kitchen/new-order') {
+        if (topic === 'aura/kitchen/update-order') {
           this.listeners.onNewOrder.forEach(cb => cb(data));
         } else if (topic.includes('/order/response')) {
           this.listeners.onOrderStatusUpdate.forEach(cb => cb(data));
