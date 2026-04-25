@@ -40,15 +40,7 @@ export default function LoginPage() {
 
     setLoading(true);
 
-    // ── MOCK: simulate a tiny network delay ──────────────────────────────────
-    // [BACKEND INTEGRATION: TODO] - POST /api/auth/login
-    // Replace the setTimeout block below with:
-    //   const res = await axiosInstance.post('/auth/login', { username, password });
-    //   login(res.data.token, res.data.user);   ← adjust AppContext.login signature
-    // ────────────────────────────────────────────────────────────────────────
-    await new Promise((r) => setTimeout(r, 600));
-
-    const ok = login(username, password);
+    const ok = await login(username, password);
     setLoading(false);
 
     if (!ok) {

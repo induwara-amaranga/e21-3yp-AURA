@@ -10,7 +10,7 @@
  * ============================================================
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   LayoutDashboard, UtensilsCrossed, DollarSign, ShoppingBag,
   Bot, ArrowUpRight, ArrowDownRight, Plus,
@@ -24,11 +24,12 @@ import { formatPrice } from '../../utils/helpers';
 import { useAppContext } from '../../context/AppContext';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { AVAILABLE_MENU_IMAGES, getMenuImageSrc, isKnownMenuImage } from '../../utils/menuImages';
+import { orderMqtt } from '../../api/mqttclient';
 
 // ── Mock robot fleet data ─────────────────────────────────────────────────────
 // [BACKEND INTEGRATION: TODO] - GET /api/robots/status
 // Description: Fetch real-time robot status from backend (battery, state, active deliveries).
-//   Consider polling every 10 s or using WebSocket for live updates.
+// Consider polling every 10 s or using WebSocket for live updates.
 // ─────────────────────────────────────────────────────────────────────────────
 const ROBOTS_DATA = [
   { id: 'AURA-01', status: 'delivering', battery: 87, deliveries: 24 },
@@ -48,7 +49,7 @@ const MENU_CATEGORIES = [
 
 // ─────────────────────────────────────────────────────────────────────────────
 export default function AdminDashboard() {
-  const { session, logout, menuItems, addMenuItem, deleteMenuItem } = useAppContext();
+  const { session, logout, menuItems, addMenuItem, deleteMenuItem, refreshMenu } = useAppContext();
   const {
     activeOrders,
     orderHistory,
@@ -57,7 +58,21 @@ export default function AdminDashboard() {
   } = useRestaurant();
   const isAdmin = session?.role === 'admin';
 
-  // [API ENDPOINT]: GET /api/v1/admin/revenue?status=PAID
+  // Subscribe to menu updates from MQTT
+  useEffect(() => {
+    orderMqtt.connect();
+
+    const unsubMenu = orderMqtt.onMenuUpdate((data) => {
+      console.log('🍽️ Menu update received:', data);
+      refreshMenu();
+    });
+
+    return () => {
+      unsubMenu();
+    };
+  }, [refreshMenu]);
+
+  // [API ENDPOINT]: GET /api/v1/admin/revenue?status=PAID\
   // [DATA SYNC]: Revenue is derived only from paid tickets so kitchen placements never inflate earnings.
   const confirmedRevenue = getConfirmedRevenue();
 
@@ -110,7 +125,7 @@ export default function AdminDashboard() {
 
   // [API ENDPOINT]: POST /api/v1/menu
   // [DATA SYNC]: Adds menu entries into shared context so Robot and Admin views render the same catalog immediately.
-  const handleAddItem = (e) => {
+  const handleAddItem = async (e) => {
     e.preventDefault();
     setFormError('');
     setFormSuccess('');
@@ -124,30 +139,38 @@ export default function AdminDashboard() {
       return setFormError('Select a valid menu image from assets/food_images.');
     }
 
-    addMenuItem({
-      ...form,
-      name: form.name.trim(),
-      description: form.description.trim(),
-      price,
-    });
-    setFormSuccess(`"${form.name}" added to the menu! It's now visible on RobotUI.`);
-    setForm({
-      name: '',
-      description: '',
-      price: '',
-      category: 'popular',
-      imageFilename: AVAILABLE_MENU_IMAGES[0] || '',
-      time: '15 min',
-    });
-    setTimeout(() => setFormSuccess(''), 4000);
+    try {
+      await addMenuItem({
+        ...form,
+        name: form.name.trim(),
+        description: form.description.trim(),
+        price,
+      });
+      setFormSuccess(`"${form.name}" added to the menu! It's now visible on RobotUI.`);
+      setForm({
+        name: '',
+        description: '',
+        price: '',
+        category: 'popular',
+        imageFilename: AVAILABLE_MENU_IMAGES[0] || '',
+        time: '15 min',
+      });
+      setTimeout(() => setFormSuccess(''), 4000);
+    } catch (error) {
+      setFormError(error.response?.data?.message || error.response?.data || 'Failed to add menu item. Try again.');
+    }
   };
 
   // [API ENDPOINT]: DELETE /api/v1/menu/:id
   // [DATA SYNC]: Removes menu rows from shared context so ordering screens cannot use deleted items.
-  const handleDeleteItem = (itemId, itemName) => {
+  const handleDeleteItem = async (itemId, itemName) => {
     if (!isAdmin) return;
     if (!window.confirm(`Remove "${itemName}" from the menu?`)) return;
-    deleteMenuItem(itemId);
+    try {
+      await deleteMenuItem(itemId);
+    } catch (error) {
+      window.alert(error.response?.data?.message || 'Failed to remove menu item.');
+    }
   };
 
   // ─────────────────────────────────────────────────────────────────────────

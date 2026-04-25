@@ -36,4 +36,7 @@ public class MenuItem {
 
     @Column(name = "emoji", length = 10)
     private String emoji;
+
+    @Column(name ="prep_time_minutes")
+    private String prepTimeMinutes;
 }

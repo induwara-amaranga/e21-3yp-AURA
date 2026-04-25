@@ -19,6 +19,8 @@ import { useRestaurant, ORDER_STATUS } from '../../context/RestaurantContext';
 import { useAppContext } from '../../context/AppContext';
 import { getTimeSince } from '../../utils/helpers';
 import { getMenuImageSrc } from '../../utils/menuImages';
+import { orderMqtt } from '../../api/mqttclient';
+//import { orderWebSocket } from '../../api/webSocket';
 
 // ─── Column config ────────────────────────────────────────────────────────────
 const COLS = [
@@ -60,6 +62,7 @@ export default function KitchenDisplay() {
     markDelivered,
     cancelOrder,
     getDeliveredHistory24h,
+    refreshOrders,
   } = useRestaurant();
   const [now, setNow] = useState(new Date());
   const [activeTab, setActiveTab] = useState('live');
@@ -70,6 +73,21 @@ export default function KitchenDisplay() {
     return () => clearInterval(t);
   }, []);
 
+  // MQTT listener for new orders
+  useEffect(() => {
+    orderMqtt.connect();
+
+    const unsubNewOrder = orderMqtt.onNewOrder(async (mqttData) => {
+      console.log('🔔 New order notification:', mqttData);
+      // Refresh orders from backend to get full data
+      await refreshOrders();
+    });
+
+    return () => {
+      unsubNewOrder();
+      orderMqtt.disconnect();
+    };
+  }, [refreshOrders]);
   // Only show non-delivered tickets on KDS live board
   const liveOrders = activeOrders.filter((o) => o.status !== ORDER_STATUS.DELIVERED);
   const deliveredHistory24h = useMemo(() => getDeliveredHistory24h(), [getDeliveredHistory24h]);

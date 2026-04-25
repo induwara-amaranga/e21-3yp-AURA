@@ -28,6 +28,7 @@ function AppShell() {
   const { session } = useAppContext();
   const isAdmin = session?.role === 'admin';
   const isKitchen = session?.role === 'kitchen';
+  //console.log('Current session:', session.role);
 
   // Not authenticated → always show Login
   if (!session) return <LoginPage />;

@@ -5,7 +5,7 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "orders")     // 'ORDER' is a reserved SQL keyword, so renamed
+@Table(name = "orders")
 @Getter @Setter
 @NoArgsConstructor
 @AllArgsConstructor
@@ -17,13 +17,15 @@ public class Order {
     @Column(name = "order_id")
     private Integer orderId;
 
-    // FK → restaurant_table.table_id  (relationship: TABLE places ORDER)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "table_id", nullable = false)
     private RestaurantTable table;
 
     @Column(name = "order_time", nullable = false)
-    private LocalDateTime orderTime;
+    private LocalDateTime orderTime;           // ← ADD THIS
+
+    @Column(name = "delivered_at")             // ← removed nullable = false
+    private LocalDateTime deliveredAt;
 
     @Column(name = "status")
     private String status;

@@ -553,7 +553,9 @@ Response:
 ### 10.6 Users APIs (Future)
 
 #### GET `/users`
+
 #### POST `/users`
+
 #### PATCH `/users/:id`
 
 Use for staff and permission management in future admin modules.
