@@ -83,6 +83,19 @@ export const orderAPI = {
       throw error;
     }
   },
+
+  getDeliveredHistory: async (hours = 24) => {
+    
+    try {
+      const response = await axiosInstance.get('/orders/history', {  // ✅ axiosInstance + correct path
+        params: { hours }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch delivered history:', error.response?.data || error.message);
+      throw error;
+    }
+  },
 };
 
 export default orderAPI;

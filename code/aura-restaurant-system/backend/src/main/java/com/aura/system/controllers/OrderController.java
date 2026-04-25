@@ -55,4 +55,11 @@ public class OrderController {
         return ResponseEntity.ok(
                 orderService.updateOrderStatus(id, request.getStatus()));
     }
+
+    // GET /api/orders/history?range=24h
+    @GetMapping("/history")
+    public ResponseEntity<List<OrderResponse>> getDeliveredHistory(
+            @RequestParam(defaultValue = "24") int hours) {
+        return ResponseEntity.ok(orderService.getDeliveredHistory(hours));
+    }
 }

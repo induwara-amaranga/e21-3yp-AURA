@@ -7,6 +7,7 @@ import com.aura.system.dtos.response.OrderResponse;
 import com.aura.system.entities.*;
 import com.aura.system.repositories.*;
 import com.aura.system.services.OrderService;
+import com.aura.system.mqtt.MqttPublisher;
 
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +33,7 @@ public class OrderServiceImpl implements OrderService {
     private final OrderItemRepository    orderItemRepository;
     private final MenuItemRepository     menuItemRepository;
     private final RestaurantTableRepository tableRepository;
+    private final MqttPublisher mqttPublisher;
 
     // ── Place Order ──────────────────────────────────────────────────────────
 
@@ -83,9 +85,30 @@ public class OrderServiceImpl implements OrderService {
 
         log.info("Order placed | orderId={} | tableId={} | total={}",
                 savedOrder.getOrderId(), table.getTableId(), total);
+        try{
+                String topic = "aura/kitchen/new-order";
+                String payload = String.format(
+                "{\"orderId\":%d,\"tableId\":%d,\"total\":%.2f,\"items\":%d}",
+                savedOrder.getOrderId(),
+                table.getTableId(),
+                total,
+                savedItems.size()
+                );
+                mqttPublisher.publish(topic, payload);
+                log.info("MQTT message published | topic={} | payload={}", topic, payload);
+
+        }
+        catch (Exception e){
+                log.error("Failed to publish MQTT message: {}", e.getMessage(), e);
+        }
+
+        log.info("Order placed | orderId={} | tableId={} | total={}",
+                savedOrder.getOrderId(), table.getTableId(), total);
+        
 
         return buildResponse(savedOrder, savedItems);
     }
+    
     @Override
     @Transactional(readOnly = true)
     public List<OrderResponse> getAllOrders() {
@@ -133,6 +156,10 @@ public class OrderServiceImpl implements OrderService {
 
         String oldStatus = order.getStatus();
         order.setStatus(status.toUpperCase());
+        // In OrderService.updateOrderStatus()
+        if ("DELIVERED".equals(status.toUpperCase())) {
+                order.setDeliveredAt(LocalDateTime.now());
+        }
         orderRepository.save(order);
 
         log.info("Order {} status: {} → {}", orderId, oldStatus, status.toUpperCase());
@@ -166,8 +193,23 @@ public class OrderServiceImpl implements OrderService {
                 .tableId(order.getTable().getTableId())
                 .status(order.getStatus())
                 .totalAmount(order.getTotalAmount())
-                .orderTime(order.getOrderTime())
+                .orderTime(order.getOrderTime())        // ✅ fixed
+                .deliveredAt(order.getDeliveredAt())    // ✅ add this
                 .items(itemResponses)
                 .build();
     }
+
+        @Override
+        @Transactional(readOnly = true)
+        public List<OrderResponse> getDeliveredHistory(int hours) {
+        LocalDateTime since = LocalDateTime.now().minusHours(hours);
+        return orderRepository.findDeliveredSince(since)
+                .stream()
+                .map(order -> {
+                        List<OrderItem> items =
+                                orderItemRepository.findByOrderOrderId(order.getOrderId());
+                        return buildResponse(order, items);
+                })
+                .collect(Collectors.toList());
+        }
 }

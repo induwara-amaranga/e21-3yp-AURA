@@ -28,10 +28,42 @@
  *    Robot UI  → markTablePaid()        → localStorage → Grand total resets to $0
  * ============================================================
  */
+/**
+ * ============================================================
+ *  AURA Restaurant System — Restaurant Context
+ * ============================================================
+ *  Single source of truth for ALL order state.
+ *
+ *  ┌─────────────────────────────────────────────────────────┐
+ *  │  ROOT CAUSE FIX — Cross-Tab Sync                        │
+ *  │                                                         │
+ *  │  React Context lives only in ONE tab's memory.          │
+ *  │  Robot UI (table1 tab) and Kitchen Display (kitchen     │
+ *  │  tab) are SEPARATE browser tabs → separate memory →     │
+ *  │  they can't share a React Context instance directly.    │
+ *  │                                                         │
+ *  │  Solution: persist state to localStorage on every       │
+ *  │  change, and listen to the browser's `storage` event    │
+ *  │  to reload state when another tab writes to it.         │
+ *  │                                                         │
+ *  │  When backend is ready, replace the localStorage layer  │
+ *  │  with a WebSocket subscription:                         │
+ *  │  // [FUTURE WEBSOCKET/API] /api/orders/sync             │
+ *  └─────────────────────────────────────────────────────────┘
+ *
+ *  Data flow:
+ *    Robot UI  → placeOrder()           → localStorage → KDS reads via storage event
+ *    Kitchen   → acceptOrder()          → localStorage → Robot UI reads via storage event
+ *    Kitchen   → markDelivered()        → localStorage → Robot UI shows "Delivered!"
+ *    Robot UI  → markTablePaid()        → localStorage → Grand total resets to $0
+ * ============================================================
+ */
 
+// CHANGE 1: added useState to import
 import {
-  createContext, useContext, useCallback, useReducer, useEffect,
+  createContext, useContext, useCallback, useReducer, useEffect, useState,
 } from 'react';
+import orderAPI from '../api/orderAPI';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const STORAGE_KEY   = 'aura_restaurant_state';
@@ -77,6 +109,29 @@ function loadInitialState() {
   }
 }
 
+function normalizeBackendOrder(raw) {
+  return {
+    id: raw.orderId,
+    tableNumber: raw.tableId != null ? `T${raw.tableId}` : 'T?',
+    ticketNum: raw.orderId,
+    items: (raw.items || []).map((item) => ({
+      id: item.menuItemId,
+      name: item.menuItemName,
+      quantity: item.quantity,
+      price: item.subtotal && item.quantity ? item.subtotal / item.quantity : 0,
+      imageFilename: item.imageUrl || '',
+      customization: item.customization || '',
+    })),
+    status: raw.status,
+    total: raw.totalAmount || 0,
+    isPaid: false,
+    isAddon: false,
+    createdAt: raw.orderTime ? new Date(raw.orderTime) : new Date(),
+    deliveredAt: raw.deliveredAt ? new Date(raw.deliveredAt) : null,
+    paidAt: null,
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Reducer — pure state transitions
 // ─────────────────────────────────────────────────────────────────────────────
@@ -84,26 +139,19 @@ function reducer(state, action) {
   switch (action.type) {
 
     case 'PLACE_ORDER': {
-      // [FUTURE WEBSOCKET/API] Replace localStorage dispatch with:
-      //   socket.emit('order:place', payload)
-      //   Kitchen listens → server saves → broadcasts back to all clients
-      const newOrder = {
-        id:          `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
-        tableNumber: action.payload.tableNumber,
-        ticketNum:   state.ticketCounter,
-        items:       action.payload.items,
-        status:      ORDER_STATUS.PENDING,
-        total:       action.payload.items.reduce((s, i) => s + i.price * i.quantity, 0),
-        isPaid:      false,
-        isAddon:     action.payload.isAddon || false,
-        createdAt:   new Date(),
-        deliveredAt: null,
-        paidAt:      null,
-      };
+      const order = action.payload.order;
       return {
         ...state,
-        orderHistory:  [...state.orderHistory, newOrder],
-        ticketCounter: state.ticketCounter + 1,
+        orderHistory: [...state.orderHistory, order],
+        ticketCounter: Math.max(state.ticketCounter + 1, order.ticketNum + 1),
+      };
+    }
+
+    case 'SET_ORDERS': {
+      return {
+        ...state,
+        orderHistory: action.payload.orderHistory,
+        ticketCounter: Math.max(state.ticketCounter, action.payload.nextTicketNum || state.ticketCounter),
       };
     }
 
@@ -167,6 +215,9 @@ const RestaurantContext = createContext(null);
 export function RestaurantProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, undefined, loadInitialState);
 
+  // CHANGE 2: new state to hold delivered history from backend
+  const [deliveredHistory, setDeliveredHistory] = useState([]);
+
   // ── Persist to localStorage on every state change ─────────────────────────
   //    This is what makes OTHER tabs receive the update via the storage event.
   //    [FUTURE WEBSOCKET/API] Remove this effect once real-time backend exists.
@@ -198,6 +249,36 @@ export function RestaurantProvider({ children }) {
     };
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  // ── Load all active orders from backend on mount ──────────────────────────
+  useEffect(() => {
+    const loadOrders = async () => {
+      try {
+        const backendOrders = await orderAPI.getAllOrders();
+        const normalized = backendOrders.map(normalizeBackendOrder);
+        dispatch({ type: 'SET_ORDERS', payload: { orderHistory: normalized } });
+      } catch (error) {
+        console.warn('[AURA] Could not load orders from backend:', error.message || error);
+      }
+    };
+
+    loadOrders();
+  }, []);
+
+  // CHANGE 3: load delivered history from backend on mount
+  // [API ENDPOINT]: GET /api/orders/history?hours=24
+  useEffect(() => {
+    const loadHistory = async () => {
+      try {
+        const raw = await orderAPI.getDeliveredHistory(24);
+        const normalized = raw.map(normalizeBackendOrder);
+        setDeliveredHistory(normalized);
+      } catch (error) {
+        console.warn('[AURA] Could not load delivered history:', error.message || error);
+      }
+    };
+    loadHistory();
   }, []);
 
   // ── Selectors (pure derivations from state) ───────────────────────────────
@@ -241,17 +322,12 @@ export function RestaurantProvider({ children }) {
     [state.orderHistory]
   );
 
-  /**
-   * [API ENDPOINT]: GET /api/v1/orders/history?range=24h
-   * [DATA SYNC]: Reads persistent delivered timestamps so kitchen history survives refresh and cross-role logins.
-   */
+  // CHANGE 4: replaced local filter with backend data
+  // [API ENDPOINT]: GET /api/orders/history?hours=24
+  // [DATA SYNC]: Real DB data — survives refresh and works across devices.
   const getDeliveredHistory24h = useCallback(() => {
-    const now = Date.now();
-    return state.orderHistory
-      .filter((o) => o.status === ORDER_STATUS.DELIVERED && o.deliveredAt)
-      .filter((o) => now - new Date(o.deliveredAt).getTime() <= DAY_IN_MS)
-      .sort((a, b) => new Date(b.deliveredAt).getTime() - new Date(a.deliveredAt).getTime());
-  }, [state.orderHistory]);
+    return deliveredHistory;
+  }, [deliveredHistory]);
 
   /**
    * All in-flight orders across tables — displayed on KDS.
@@ -269,31 +345,69 @@ export function RestaurantProvider({ children }) {
 
   // ── Mutators ──────────────────────────────────────────────────────────────
 
-  const placeOrder = useCallback((tableNumber, items, isAddon = false) => {
-    // [API ENDPOINT]: POST /api/v1/orders/addon
-    // [DATA SYNC]: Persists the new ticket into shared context + localStorage for immediate Kitchen/Admin visibility.
-    dispatch({ type: 'PLACE_ORDER', payload: { tableNumber, items, isAddon } });
+  const placeOrder = useCallback(async (tableNumber, items, isAddon = false) => {
+    const tableId = Number(String(tableNumber).replace(/\D/g, '')) || null;
+    const payload = {
+      tableId: 1,
+      items: items.map((item) => ({
+        menuItemId: item.id,
+        quantity: item.quantity,
+      })),
+    };
+
+    try {
+      const response = await orderAPI.placeOrder(payload);
+      const order = normalizeBackendOrder(response);
+      dispatch({ type: 'PLACE_ORDER', payload: { order } });
+      return order;
+    } catch (error) {
+      console.error('[AURA] Failed to place order:', error.response?.data || error.message || error);
+      throw error;
+    }
   }, []);
 
-  const updateOrderStatus = useCallback((orderId, status) => {
-    // [API ENDPOINT]: PATCH /api/v1/orders/:orderId/status
-    // [DATA SYNC]: Status changes are written once and reflected across all role views through storage synchronization.
-    dispatch({ type: 'UPDATE_ORDER_STATUS', payload: { orderId, status } });
+  const updateOrderStatus = useCallback(async (orderId, status) => {
+    try {
+      await orderAPI.updateOrderStatus(orderId, status);
+      dispatch({ type: 'UPDATE_ORDER_STATUS', payload: { orderId, status } });
+    } catch (error) {
+      console.error('[AURA] Failed to update order status:', error.response?.data || error.message || error);
+      throw error;
+    }
   }, []);
 
-  const acceptOrder   = useCallback((id) => updateOrderStatus(id, ORDER_STATUS.PREPARING), [updateOrderStatus]);
-  const markReady     = useCallback((id) => updateOrderStatus(id, ORDER_STATUS.READY),     [updateOrderStatus]);
-  const markDelivered = useCallback((id) => updateOrderStatus(id, ORDER_STATUS.DELIVERED), [updateOrderStatus]);
+  const acceptOrder = useCallback((id) => updateOrderStatus(id, ORDER_STATUS.PREPARING), [updateOrderStatus]);
+  const markReady   = useCallback((id) => updateOrderStatus(id, ORDER_STATUS.READY),     [updateOrderStatus]);
+
+  // CHANGE 5: markDelivered now refreshes history from backend after delivery
+  const markDelivered = useCallback(async (id) => {
+    await updateOrderStatus(id, ORDER_STATUS.DELIVERED);
+    try {
+      const raw = await orderAPI.getDeliveredHistory(24);
+      setDeliveredHistory(raw.map(normalizeBackendOrder));
+    } catch (e) {
+      console.warn('[AURA] Could not refresh delivered history:', e.message);
+    }
+  }, [updateOrderStatus]);
 
   const cancelOrder = useCallback((orderId) => {
-    // [API ENDPOINT]: DELETE /api/v1/orders/:orderId
-    // [DATA SYNC]: Removes stale tickets from the shared store to keep kitchen board and table session consistent.
+    // [API ENDPOINT]: DELETE /api/v1/orders/:orderId (not available in backend yet)
     dispatch({ type: 'CANCEL_ORDER', payload: { orderId } });
   }, []);
 
+  // Refresh orders from backend (used by MQTT callbacks)
+  const refreshOrders = useCallback(async () => {
+    try {
+      const backendOrders = await orderAPI.getAllOrders();
+      const normalized = backendOrders.map(normalizeBackendOrder);
+      dispatch({ type: 'SET_ORDERS', payload: { orderHistory: normalized } });
+    } catch (error) {
+      console.warn('[AURA] Failed to refresh orders:', error.message);
+    }
+  }, []);
+
   const markTablePaid = useCallback((tableNumber) => {
-    // [API ENDPOINT]: POST /api/v1/payments/verify
-    // [DATA SYNC]: Marks all table tickets as paid so confirmed revenue updates persist for Admin analytics and refreshes.
+    // [API ENDPOINT]: POST /api/v1/payments
     dispatch({ type: 'MARK_TABLE_PAID', payload: { tableNumber } });
   }, []);
 
@@ -312,6 +426,7 @@ export function RestaurantProvider({ children }) {
     markReady,
     markDelivered,
     cancelOrder,
+    refreshOrders,
     markTablePaid,
   };
 

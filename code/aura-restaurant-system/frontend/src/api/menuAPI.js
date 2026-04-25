@@ -3,6 +3,9 @@
  *  Menu API Service
  * ============================================================
  *  Handles all menu-related API calls.
+ *  Backend expects multipart/form-data with @ModelAttribute.
+ *  Do NOT set Content-Type manually — axios sets it with the
+ *  correct multipart boundary automatically.
  * ============================================================
  */
 
@@ -81,31 +84,97 @@ export const menuAPI = {
 
   /**
    * Create new menu item (admin only)
-   * @param {Object} menuItem - Menu item data
-   * @param {File} file - Optional image file
+   * Sends multipart/form-data to match @ModelAttribute + @RequestParam("file")
+   * on the Spring controller. Do NOT set Content-Type header manually.
+   *
+   * @param {Object} menuItem - Menu item fields (must match MenuItem entity field names exactly)
+   * @param {File|null} file  - Optional image file
    */
   createMenuItem: async (menuItem, file = null) => {
+  try {
+    const formData = new FormData();
+
+    Object.keys(menuItem).forEach((key) => {
+      const value = menuItem[key];
+      if (value !== undefined && value !== null) {
+        formData.append(key, value);
+      }
+    });
+
+    if (file) {
+      formData.append('file', file);
+    }
+
+    const response = await axiosInstance.post('/menu', formData, {
+      headers: {
+        'Content-Type': undefined, // ← delete the global default
+      },                           //   axios then sets multipart + boundary automatically
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Failed to create menu item:', error.response?.data || error.message);
+    throw error;
+  }
+},
+  /**
+   * Update menu item (admin only)
+   * Same multipart approach as create.
+   *
+   * @param {number} id       - Menu item ID
+   * @param {Object} menuItem - Updated fields
+   * @param {File|null} file  - Optional new image file
+   */
+  updateMenuItem: async (id, menuItem, file = null) => {
     try {
       const formData = new FormData();
-      
-      // Add menu item fields to formData
-      Object.keys(menuItem).forEach(key => {
-        formData.append(key, menuItem[key]);
+
+      Object.keys(menuItem).forEach((key) => {
+        const value = menuItem[key];
+        if (value !== undefined && value !== null) {
+          formData.append(key, value);
+        }
       });
-      
-      // Add file if provided
+
       if (file) {
         formData.append('file', file);
       }
 
-      const response = await axiosInstance.post('/menu', formData, {
+      const response = await axiosInstance.put(`/menu/${id}`, formData, {
         headers: {
-          'Content-Type': 'multipart/form-data',
+            'Content-Type': undefined,
         },
-      });
+        });
       return response.data;
     } catch (error) {
-      console.error('Failed to create menu item:', error.response?.data || error.message);
+      console.error(`Failed to update menu item ${id}:`, error.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  /**
+   * Toggle availability of a menu item
+   * @param {number} id - Menu item ID
+   */
+  toggleAvailability: async (id) => {
+    try {
+      const response = await axiosInstance.patch(`/menu/${id}/availability`);
+      return response.data;
+    } catch (error) {
+      console.error(`Failed to toggle availability for item ${id}:`, error.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  /**
+   * Delete a menu item by ID
+   * @param {number} id - Menu item ID
+   */
+  deleteMenuItem: async (id) => {
+    try {
+      const response = await axiosInstance.delete(`/menu/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error(`Failed to delete menu item ${id}:`, error.response?.data || error.message);
       throw error;
     }
   },

@@ -56,4 +56,12 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
         )
         """)
     Float sumUnpaidOrderTotals();
+
+    @Query("""
+    SELECT o FROM Order o
+    WHERE o.status = 'DELIVERED'
+    AND o.deliveredAt >= :since
+    ORDER BY o.deliveredAt DESC
+    """)
+    List<Order> findDeliveredSince(@Param("since") LocalDateTime since);
 }

@@ -2,20 +2,46 @@ package com.aura.system.services.impl;
 
 import com.aura.service.ImageService;
 import com.aura.system.entities.MenuItem;
+import com.aura.system.mqtt.MqttGateway;
 import com.aura.system.repositories.MenuItemRepository;
 import com.aura.system.services.MenuItemService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class MenuItemServiceImpl implements MenuItemService {
 
     private final MenuItemRepository menuItemRepository;
     private final ImageService imageService;
+    private final MqttGateway mqttGateway;
+    private final ObjectMapper objectMapper;
+
+    private static final String MENU_TOPIC = "aura/menu/updated";
+
+    private void publishMenuUpdate(String action, MenuItem item) {
+        try {
+            Map<String, Object> message = new HashMap<>();
+            message.put("action", action);
+            message.put("timestamp", System.currentTimeMillis());
+            message.put("item", item);
+            
+            String json = objectMapper.writeValueAsString(message);
+            mqttGateway.sendToMqtt(json, MENU_TOPIC);
+            log.info("Published menu {} update for item: {}", action, item.getName());
+        } catch (JsonProcessingException e) {
+            log.error("Failed to serialize menu update message", e);
+        }
+    }
 
     @Override
     public List<MenuItem> getAllMenuItems() {
@@ -50,7 +76,9 @@ public class MenuItemServiceImpl implements MenuItemService {
             menuItem.setImageUrl(imageUrl);
         }
 
-        return menuItemRepository.save(menuItem);
+        MenuItem saved = menuItemRepository.save(menuItem);
+        publishMenuUpdate("created", saved);
+        return saved;
     }
 
     @Override
@@ -69,21 +97,24 @@ public class MenuItemServiceImpl implements MenuItemService {
             existing.setImageUrl(imageUrl);
         }
 
-        return menuItemRepository.save(existing);
+        MenuItem saved = menuItemRepository.save(existing);
+        publishMenuUpdate("updated", saved);
+        return saved;
     }
 
     @Override
     public MenuItem toggleAvailability(Integer id) {
         MenuItem existing = getMenuItemById(id);
         existing.setAvailability(!existing.getAvailability());
-        return menuItemRepository.save(existing);
+        MenuItem saved = menuItemRepository.save(existing);
+        publishMenuUpdate("toggled", saved);
+        return saved;
     }
 
     @Override
     public void deleteMenuItem(Integer id) {
-        if (!menuItemRepository.existsById(id)) {
-            throw new RuntimeException("Menu item not found with id: " + id);
-        }
+        MenuItem item = getMenuItemById(id);
         menuItemRepository.deleteById(id);
+        publishMenuUpdate("deleted", item);
     }
 }

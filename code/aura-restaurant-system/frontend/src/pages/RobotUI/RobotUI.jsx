@@ -3,6 +3,7 @@ import { ChefHat, Flame, Leaf, IceCreamCone, Coffee, UtensilsCrossed, Plus, Minu
 import { useAppContext } from '../../context/AppContext';
 import { useRestaurant, ORDER_STATUS } from '../../context/RestaurantContext';
 import { getMenuImageSrc } from '../../utils/menuImages';
+import { orderMqtt } from '../../api/mqttclient';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const CATS = [
@@ -134,8 +135,15 @@ function PayModal({ total, table, dark, onSuccess, onClose }) {
 // MAIN COMPONENT
 // ─────────────────────────────────────────────────────────────────────────────
 export default function RobotUI() {
-  const { session, logout, verifyCredentials, menuItems, theme, toggleTheme } = useAppContext();
+  const { session, logout, verifyCredentials, menuItems, theme, toggleTheme, refreshMenu } = useAppContext();
   const { placeOrder, getUnpaidOrders, getUnpaidTotal, getLatestOrder, markTablePaid } = useRestaurant();
+
+  // Subscribe to menu updates from MQTT (synced from AdminDashboard)
+  useEffect(() => {
+    orderMqtt.connect();
+    const unsubMenu = orderMqtt.onMenuUpdate(() => refreshMenu());
+    return () => { unsubMenu(); };
+  }, [refreshMenu]);
 
   const dark       = theme === 'dark';
   const table      = session?.tableNumber || 'T?';

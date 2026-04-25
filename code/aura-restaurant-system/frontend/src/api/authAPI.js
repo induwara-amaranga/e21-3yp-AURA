@@ -23,9 +23,9 @@ export const authAPI = {
       });
       const { token, user } = response.data;
       
-      // Store JWT token
+      // Store JWT token and user session
       localStorage.setItem('authToken', token);
-      localStorage.setItem('user', JSON.stringify(user));
+      localStorage.setItem('authUser', JSON.stringify(user));
       
       // Add token to future requests
       axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -54,7 +54,7 @@ export const authAPI = {
       const { token, user } = response.data;
       
       localStorage.setItem('authToken', token);
-      localStorage.setItem('user', JSON.stringify(user));
+      localStorage.setItem('authUser', JSON.stringify(user));
       axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       
       return response.data;
@@ -71,7 +71,7 @@ export const authAPI = {
     try {
       await axiosInstance.post('/auth/logout');
       localStorage.removeItem('authToken');
-      localStorage.removeItem('user');
+      localStorage.removeItem('authUser');
       delete axiosInstance.defaults.headers.common['Authorization'];
     } catch (error) {
       console.error('Logout failed:', error.response?.data || error.message);
