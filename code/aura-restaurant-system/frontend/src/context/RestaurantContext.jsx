@@ -64,8 +64,9 @@ import {
   createContext, useContext, useCallback, useReducer, useEffect, useState,
 } from 'react';
 import orderAPI from '../api/orderAPI';
-// [REAL-TIME SYNC] Import STOMP client to replace localStorage sync
-import { Client } from '@stomp/stompjs';
+// ✅ FIXED: Removed STOMP WebSocket import to prevent connection failures
+// Using MQTT (via KitchenDisplay) instead for real-time updates
+// import { Client } from '@stomp/stompjs';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const STORAGE_KEY   = 'aura_restaurant_state';
@@ -134,6 +135,12 @@ function reducer(state, action) {
 
     case 'PLACE_ORDER': {
       const order = action.payload.order;
+      // ✅ FIXED: Prevent duplicate orders by checking if already exists
+      const alreadyExists = state.orderHistory.some(o => o.id === order.id);
+      if (alreadyExists) {
+        console.log('⚠️ Order already exists, skipping duplicate:', order.id);
+        return state;
+      }
       return {
         ...state,
         orderHistory: [...state.orderHistory, order],
@@ -203,45 +210,24 @@ export function RestaurantProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE);
   const [deliveredHistory, setDeliveredHistory] = useState([]);
 
-  // ── [REPLACED LOCALSTORAGE WITH WEBSOCKET] ─────────────────────────────────
+  // ── [WEBSOCKET DISABLED - USE MQTT INSTEAD] ─────────────────────────────────
+  // ✅ FIXED: Removed WebSocket to avoid duplicate orders from dual channels
+  // MQTT (via KitchenDisplay + orderAPI.placeOrder) is the single source of truth
+  // 
+  // WebSocket was causing:
+  //   1. Silent failures when ws://localhost:8080/ws doesn't exist
+  //   2. Duplicate orders when both WebSocket and MQTT fire
+  //   3. Race conditions between multiple subscription sources
+  //
+  // New approach: REST API (placeOrder) + MQTT notifications (real-time) only
   useEffect(() => {
-    const stompClient = new Client({
-      brokerURL: 'ws://localhost:8080/ws', // Backend WebSocket Endpoint
-      reconnectDelay: 5000,
-      onConnect: () => {
-        console.log('[AURA] Connected to WebSocket');
-        
-        // Listen for all order updates (new orders and status changes)
-        stompClient.subscribe('/topic/orders', (message) => {
-          const updatedOrder = JSON.parse(message.body);
-          const normalized = normalizeBackendOrder(updatedOrder);
-          
-          // Check if it's an update to existing or a brand new order
-          const exists = state.orderHistory.some(o => o.id === normalized.id);
-          if (exists) {
-            dispatch({ 
-              type: 'UPDATE_ORDER_STATUS', 
-              payload: { orderId: normalized.id, status: normalized.status } 
-            });
-          } else {
-            dispatch({ type: 'PLACE_ORDER', payload: { order: normalized } });
-          }
-        });
-
-        // Listen for kitchen-specific topics if needed
-        stompClient.subscribe('/topic/kitchen/orders', (message) => {
-           const order = normalizeBackendOrder(JSON.parse(message.body));
-           dispatch({ type: 'PLACE_ORDER', payload: { order } });
-        });
-      },
-      onStompError: (frame) => {
-        console.error('[AURA] STOMP Error:', frame.headers['message']);
-      }
-    });
-
-    stompClient.activate();
-    return () => stompClient.deactivate();
-  }, [state.orderHistory]);
+    // WebSocket connection disabled — will be re-enabled only if backend has proper /ws endpoint
+    // For now, rely on:
+    //   - REST API for order placement (synchronous)
+    //   - MQTT for real-time kitchen notifications (via orderMqtt in KitchenDisplay)
+    //   - refreshOrders() to sync state when needed
+    return () => {};
+  }, []);
 
   // ── Load all active orders from backend on mount ──────────────────────────
   useEffect(() => {
@@ -341,13 +327,21 @@ export function RestaurantProvider({ children }) {
     try {
       const response = await orderAPI.placeOrder(payload);
       const order = normalizeBackendOrder(response);
-      dispatch({ type: 'PLACE_ORDER', payload: { order } });
+      
+      // ✅ FIXED: Check if order already exists before adding (deduplication)
+      const orderExists = state.orderHistory.some(o => o.id === order.id);
+      if (!orderExists) {
+        dispatch({ type: 'PLACE_ORDER', payload: { order } });
+        console.log('✅ Order added to state:', order.id);
+      } else {
+        console.log('ℹ️ Order already exists in state:', order.id);
+      }
       return order;
     } catch (error) {
       console.error('[AURA] Failed to place order:', error.response?.data || error.message || error);
       throw error;
     }
-  }, []);
+  }, [state.orderHistory]);
 
   const updateOrderStatus = useCallback(async (orderId, status) => {
     try {
@@ -383,11 +377,25 @@ export function RestaurantProvider({ children }) {
     try {
       const backendOrders = await orderAPI.getAllOrders();
       const normalized = backendOrders.map(normalizeBackendOrder);
-      dispatch({ type: 'SET_ORDERS', payload: { orderHistory: normalized } });
+      
+      // ✅ FIXED: Merge with existing orders to prevent loss of local state
+      // Only add orders from backend that don't already exist in state
+      const newOrders = normalized.filter(
+        backendOrder => !state.orderHistory.some(o => o.id === backendOrder.id)
+      );
+      
+      if (newOrders.length > 0) {
+        console.log(`📥 ${newOrders.length} new orders from backend`);
+        newOrders.forEach(o => {
+          dispatch({ type: 'PLACE_ORDER', payload: { order: o } });
+        });
+      } else {
+        console.log('✅ Orders already synced');
+      }
     } catch (error) {
       console.warn('[AURA] Failed to refresh orders:', error.message);
     }
-  }, []);
+  }, [state.orderHistory]);
 
   const markTablePaid = useCallback((tableNumber) => {
     // [API ENDPOINT]: POST /api/v1/payments
