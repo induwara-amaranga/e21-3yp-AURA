@@ -14,47 +14,63 @@ class RobotMqttClient:
         self.menu_response = None
         self.menu_event = threading.Event()
 
+    # පියවර 01: Connect වූ පසු Status Topic එකට Subscribe වීම
     def on_connect(self, client, userdata, flags, rc):
         if rc == 0:
-            print(f"Connected to MQTT Broker: {MQTT_BROKER}")
-            # Subscribing to direct robot commands and menu responses
+            print(f"✅ Connected to MQTT Broker: {MQTT_BROKER}")
+            
+            # පවතින Subscriptions
             self.client.subscribe(f"aura/robot/{self.robot_id}/#")
             self.client.subscribe("aura/table/+/menu/response")
+            
+            # නව Subscription: Backend එකෙන් එවන status updates ලබා ගැනීමට
+            # මෙය aura/robot/1/status වැනි topics වලට සවන් දෙයි
+            status_topic = f"aura/robot/+/status" 
+            self.client.subscribe(status_topic)
+            print(f"📡 Subscribed to status updates on: {status_topic}")
         else:
-            print(f"Connection failed with code {rc}")
+            print(f"❌ Connection failed with code {rc}")
 
+    # පියවර 02: පණිවිඩය ලැබුණු විට ක්‍රියාත්මක වන Callback එක
     def on_message(self, client, userdata, msg):
         try:
             payload = json.loads(msg.payload.decode())
-            print(f"Message received on {msg.topic}: {payload}")
+            # print(f"📩 Message received on {msg.topic}") # Debugging සඳහා පමණක් පාවිච්චි කරන්න
 
+            # 1. Menu Response සඳහා (පවතින logic එක)
             if msg.topic.endswith("/menu/response"):
                 self.menu_response = payload
                 self.menu_event.set()
 
-            # Logic to handle incoming messages from Backend can be added here
+            # 2. Order Ready Status සඳහා (අලුතින් එක් කළ කොටස)
+            # Topic එක "aura/robot/1/status" වැනි එකක් දැයි පරීක්ෂා කරයි
+            elif "status" in msg.topic and "aura/robot/" in msg.topic:
+                if payload.get("status") == "READY":
+                    table_id = payload.get("tableId")
+                    print(f"🚀 [ACTION] Order is READY for Table {table_id}. Moving Robot...")
+                    
+                    # මෙතැනදී Hardware (OLED/Stepper) ක්‍රියාත්මක කරන function එක කැඳවිය හැක
+                    self.handle_hardware_action(table_id)
+
         except Exception as e:
-            print(f"Error parsing message: {e}")
+            print(f"❌ Error parsing message: {e}")
+
+    # Hardware ක්‍රියාත්මක කිරීමට අදාළ function එක (උදාහරණයක් ලෙස)
+    def handle_hardware_action(self, table_id):
+        # මෙහිදී main_controller හි hardware objects වෙත පණිවිඩ යැවිය හැක
+        # දැනට log එකක් පමණක් පෙන්වයි
+        pass
 
     def request_menu(self, table_id="1", timeout=5):
-        """Request the current available menu from the backend over MQTT."""
         self.menu_event.clear()
         self.menu_response = None
-
         topic = f"aura/table/{table_id}/menu"
         self.client.publish(topic, json.dumps({"request": "menu"}), qos=1)
-        print(f"Requested menu for table {table_id} on {topic}")
-
         if self.menu_event.wait(timeout):
             return self.menu_response
-
-        print("Menu request timed out.")
         return None
 
     def publish_order(self, table_id, items):
-        """
-        Matches Backend topic: aura/table/+/order
-        """
         topic = f"aura/table/{table_id}/order"
         order_payload = {
             "tableId": table_id,
@@ -62,12 +78,8 @@ class RobotMqttClient:
             "timestamp": time.time()
         }
         self.client.publish(topic, json.dumps(order_payload), qos=1)
-        print(f"Order published to {topic}")
 
     def publish_status(self, battery, location, state):
-        """
-        Matches Backend topic: aura/robot/+/status
-        """
         topic = f"aura/robot/{self.robot_id}/status"
         status_payload = {
             "battery": battery,

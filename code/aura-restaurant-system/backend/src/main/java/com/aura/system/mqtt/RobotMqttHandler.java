@@ -115,6 +115,26 @@ public class RobotMqttHandler {
     private void handlePlaceOrder(String tableId, String payload, String responseTopic) throws Exception {
         PlaceOrderRequest request = objectMapper.readValue(payload, PlaceOrderRequest.class);
 
+        Integer topicTableId;
+        try {
+            topicTableId = Integer.valueOf(tableId);
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("Invalid table id in topic: " + tableId);
+        }
+
+        // Frontend/PI can occasionally send null tableId. Use topic table id as source of truth.
+        if (request.getTableId() == null) {
+            request.setTableId(topicTableId);
+        } else if (!request.getTableId().equals(topicTableId)) {
+            throw new IllegalArgumentException(
+                    "Table ID mismatch between topic and payload: topic="
+                            + topicTableId + ", payload=" + request.getTableId());
+        }
+
+        if (request.getItems() == null || request.getItems().isEmpty()) {
+            throw new IllegalArgumentException("Order must contain at least one item");
+        }
+
         var order = orderService.placeOrder(request);  // reuse your existing service
 
         String json = objectMapper.writeValueAsString(

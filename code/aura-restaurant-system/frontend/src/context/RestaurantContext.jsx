@@ -64,6 +64,8 @@ import {
   createContext, useContext, useCallback, useReducer, useEffect, useState,
 } from 'react';
 import orderAPI from '../api/orderAPI';
+// [REAL-TIME SYNC] Import STOMP client to replace localStorage sync
+import { Client } from '@stomp/stompjs';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const STORAGE_KEY   = 'aura_restaurant_state';
@@ -97,16 +99,8 @@ const hydrate = (raw) => ({
 // Helper: read initial state from localStorage (or use empty state)
 // ─────────────────────────────────────────────────────────────────────────────
 function loadInitialState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return INITIAL_STATE;
-    const parsed = JSON.parse(raw);
-    // Version guard — wipe state if schema changed
-    if (parsed.__v !== STORAGE_VER) return INITIAL_STATE;
-    return hydrate(parsed);
-  } catch {
-    return INITIAL_STATE;
-  }
+  // We keep this function for structure, but WebSocket will provide the truth.
+  return INITIAL_STATE;
 }
 
 function normalizeBackendOrder(raw) {
@@ -156,9 +150,6 @@ function reducer(state, action) {
     }
 
     case 'UPDATE_ORDER_STATUS': {
-      // [FUTURE WEBSOCKET/API] Replace with:
-      //   socket.emit('order:status', { orderId, status })
-      //   Robot UI listens → updates its status badge instantly
       return {
         ...state,
         orderHistory: state.orderHistory.map((o) =>
@@ -177,9 +168,6 @@ function reducer(state, action) {
     }
 
     case 'MARK_TABLE_PAID': {
-      // [FUTURE WEBSOCKET/API] Replace with:
-      //   socket.emit('payment:confirm', { tableNumber })
-      //   Server marks orders, broadcasts clearance to Robot UI
       return {
         ...state,
         orderHistory: state.orderHistory.map((o) =>
@@ -197,7 +185,6 @@ function reducer(state, action) {
       };
     }
 
-    // ── Triggered by the `storage` event when another tab writes state ────────
     case 'SYNC_FROM_STORAGE': {
       return hydrate(action.payload);
     }
@@ -213,43 +200,48 @@ function reducer(state, action) {
 const RestaurantContext = createContext(null);
 
 export function RestaurantProvider({ children }) {
-  const [state, dispatch] = useReducer(reducer, undefined, loadInitialState);
-
-  // CHANGE 2: new state to hold delivered history from backend
+  const [state, dispatch] = useReducer(reducer, INITIAL_STATE);
   const [deliveredHistory, setDeliveredHistory] = useState([]);
 
-  // ── Persist to localStorage on every state change ─────────────────────────
-  //    This is what makes OTHER tabs receive the update via the storage event.
-  //    [FUTURE WEBSOCKET/API] Remove this effect once real-time backend exists.
+  // ── [REPLACED LOCALSTORAGE WITH WEBSOCKET] ─────────────────────────────────
   useEffect(() => {
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ ...state, __v: STORAGE_VER })
-      );
-    } catch (e) {
-      console.warn('[AURA] Could not write to localStorage:', e);
-    }
-  }, [state]);
+    const stompClient = new Client({
+      brokerURL: 'ws://localhost:8080/ws', // Backend WebSocket Endpoint
+      reconnectDelay: 5000,
+      onConnect: () => {
+        console.log('[AURA] Connected to WebSocket');
+        
+        // Listen for all order updates (new orders and status changes)
+        stompClient.subscribe('/topic/orders', (message) => {
+          const updatedOrder = JSON.parse(message.body);
+          const normalized = normalizeBackendOrder(updatedOrder);
+          
+          // Check if it's an update to existing or a brand new order
+          const exists = state.orderHistory.some(o => o.id === normalized.id);
+          if (exists) {
+            dispatch({ 
+              type: 'UPDATE_ORDER_STATUS', 
+              payload: { orderId: normalized.id, status: normalized.status } 
+            });
+          } else {
+            dispatch({ type: 'PLACE_ORDER', payload: { order: normalized } });
+          }
+        });
 
-  // ── Listen for changes made by OTHER tabs ─────────────────────────────────
-  //    The `storage` event fires in all tabs EXCEPT the one that wrote the data.
-  //    [FUTURE WEBSOCKET/API] Replace this with websocket.on('state:sync', ...)
-  useEffect(() => {
-    const handleStorage = (e) => {
-      if (e.key !== STORAGE_KEY || !e.newValue) return;
-      try {
-        const fresh = JSON.parse(e.newValue);
-        // Ignore stale schema versions
-        if (fresh.__v !== STORAGE_VER) return;
-        dispatch({ type: 'SYNC_FROM_STORAGE', payload: fresh });
-      } catch {
-        // Ignore malformed storage values
+        // Listen for kitchen-specific topics if needed
+        stompClient.subscribe('/topic/kitchen/orders', (message) => {
+           const order = normalizeBackendOrder(JSON.parse(message.body));
+           dispatch({ type: 'PLACE_ORDER', payload: { order } });
+        });
+      },
+      onStompError: (frame) => {
+        console.error('[AURA] STOMP Error:', frame.headers['message']);
       }
-    };
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
-  }, []);
+    });
+
+    stompClient.activate();
+    return () => stompClient.deactivate();
+  }, [state.orderHistory]);
 
   // ── Load all active orders from backend on mount ──────────────────────────
   useEffect(() => {
@@ -331,24 +323,15 @@ export function RestaurantProvider({ children }) {
 
   /**
    * All in-flight orders across tables — displayed on KDS.
-   *
-   * IMPORTANT:
-   * Kitchen workflow must follow ORDER_STATUS lifecycle, not payment flag.
-   * A customer may pay before cooking starts, but the ticket still needs
-   * to remain visible to kitchen until it is delivered.
-   *
-   * [BACKEND INTEGRATION: TODO]
-   * Mirror this behavior with a status-driven query such as:
-   * GET /api/v1/orders?statuses=PENDING,PREPARING,READY
    */
   const activeOrders = state.orderHistory.filter((o) => o.status !== ORDER_STATUS.DELIVERED);
 
   // ── Mutators ──────────────────────────────────────────────────────────────
 
   const placeOrder = useCallback(async (tableNumber, items, isAddon = false) => {
-    const tableId = Number(String(tableNumber).replace(/\D/g, '')) || null;
+    const tableId = Number(String(tableNumber).replace(/\D/g, '')) || 1;
     const payload = {
-      tableId: 1,
+      tableId: tableId,
       items: items.map((item) => ({
         menuItemId: item.id,
         quantity: item.quantity,

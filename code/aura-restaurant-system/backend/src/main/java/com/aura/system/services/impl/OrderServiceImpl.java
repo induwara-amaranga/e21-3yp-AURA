@@ -8,6 +8,8 @@ import com.aura.system.entities.*;
 import com.aura.system.repositories.*;
 import com.aura.system.services.OrderService;
 import com.aura.system.mqtt.MqttPublisher;
+import com.aura.system.mqtt.MqttGateway; // පියවර 01: Gateway එක Import කිරීම
+import com.fasterxml.jackson.databind.ObjectMapper; // JSON සඳහා
 
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -17,36 +19,34 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
-
-//import static com.aura.system.entities.Account.Role;
-//import com.aura.system.dtos.request.PlaceOrderRequest;
-
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class OrderServiceImpl implements OrderService {
 
-    private final OrderRepository        orderRepository;
-    private final OrderItemRepository    orderItemRepository;
-    private final MenuItemRepository     menuItemRepository;
+    private final OrderRepository orderRepository;
+    private final OrderItemRepository orderItemRepository;
+    private final MenuItemRepository menuItemRepository;
     private final RestaurantTableRepository tableRepository;
     private final MqttPublisher mqttPublisher;
+    
+    // පියවර 01: MqttGateway සහ ObjectMapper Inject කිරීම (RequiredArgsConstructor නිසා final ලෙස යොදන්න)
+    private final MqttGateway mqttGateway; 
+    private final ObjectMapper objectMapper;
 
     // ── Place Order ──────────────────────────────────────────────────────────
 
     @Override
     @Transactional
     public OrderResponse placeOrder(PlaceOrderRequest request) {
-
-        // 1. Validate table
         RestaurantTable table = tableRepository.findById(request.getTableId())
-                .orElseThrow(() -> new EntityNotFoundException(
-                        "Table not found: " + request.getTableId()));
+                .orElseThrow(() -> new EntityNotFoundException("Table not found: " + request.getTableId()));
 
-        // 2. Save Order first (no cascade — entity has no @OneToMany list)
         Order order = Order.builder()
                 .table(table)
                 .status("PENDING")
@@ -56,14 +56,12 @@ public class OrderServiceImpl implements OrderService {
 
         Order savedOrder = orderRepository.save(order);
 
-        // 3. Build and save each OrderItem, accumulate total
         float total = 0.0f;
         List<OrderItem> savedItems = new ArrayList<>();
 
         for (OrderItemRequest itemReq : request.getItems()) {
             MenuItem menuItem = menuItemRepository.findById(itemReq.getMenuItemId())
-                    .orElseThrow(() -> new EntityNotFoundException(
-                            "Menu item not found: " + itemReq.getMenuItemId()));
+                    .orElseThrow(() -> new EntityNotFoundException("Menu item not found: " + itemReq.getMenuItemId()));
 
             float subtotal = menuItem.getPrice() * itemReq.getQuantity();
             total += subtotal;
@@ -79,75 +77,26 @@ public class OrderServiceImpl implements OrderService {
             savedItems.add(orderItemRepository.save(orderItem));
         }
 
-        // 4. Update total on the order
         savedOrder.setTotalAmount(total);
         orderRepository.save(savedOrder);
 
-        log.info("Order placed | orderId={} | tableId={} | total={}",
-                savedOrder.getOrderId(), table.getTableId(), total);
-        try{
-                String topic = "aura/kitchen/update-order";
-                String payload = String.format(
+        // Kitchen Update via MQTT
+        try {
+            String topic = "aura/kitchen/update-order";
+            String payload = String.format(
                 "{\"orderId\":%d,\"tableId\":%d,\"total\":%.2f,\"items\":%d}",
-                savedOrder.getOrderId(),
-                table.getTableId(),
-                total,
-                savedItems.size()
-                );
-                mqttPublisher.publish(topic, payload);
-                log.info("MQTT message published | topic={} | payload={}", topic, payload);
-
+                savedOrder.getOrderId(), table.getTableId(), total, savedItems.size()
+            );
+            mqttPublisher.publish(topic, payload);
+            log.info("Order placed & Kitchen notified | orderId={}", savedOrder.getOrderId());
+        } catch (Exception e) {
+            log.error("Failed to notify kitchen: {}", e.getMessage());
         }
-        catch (Exception e){
-                log.error("Failed to publish MQTT message: {}", e.getMessage(), e);
-        }
-
-        log.info("Order placed | orderId={} | tableId={} | total={}",
-                savedOrder.getOrderId(), table.getTableId(), total);
-        
 
         return buildResponse(savedOrder, savedItems);
     }
-    
-    @Override
-    @Transactional(readOnly = true)
-    public List<OrderResponse> getAllOrders() {
-        return orderRepository.findAll()
-                .stream()
-                .map(order -> {
-                    List<OrderItem> items =
-                            orderItemRepository.findByOrderOrderId(order.getOrderId());
-                    return buildResponse(order, items);
-                })
-                .collect(Collectors.toList());
-    }
 
-    // ── Get Order By ID ──────────────────────────────────────────────────────
-
-    @Override
-    @Transactional(readOnly = true)
-    public OrderResponse getOrderById(Integer orderId) {
-        Order order = findOrThrow(orderId);
-        List<OrderItem> items = orderItemRepository.findByOrderOrderId(orderId);
-        return buildResponse(order, items);
-    }
-
-    // ── Get Orders By Table ──────────────────────────────────────────────────
-
-    @Override
-    @Transactional(readOnly = true)
-    public List<OrderResponse> getOrdersByTable(Integer tableId) {
-        return orderRepository.findByTableTableId(tableId)
-                .stream()
-                .map(order -> {
-                    List<OrderItem> items =
-                            orderItemRepository.findByOrderOrderId(order.getOrderId());
-                    return buildResponse(order, items);
-                })
-                .collect(Collectors.toList());
-    }
-
-    // ── Update Status ────────────────────────────────────────────────────────
+    // ── Update Status (පියවර 02: Robot Notification එක් කළ කොටස) ──────────────
 
     @Override
     @Transactional
@@ -155,40 +104,78 @@ public class OrderServiceImpl implements OrderService {
         Order order = findOrThrow(orderId);
 
         String oldStatus = order.getStatus();
-        order.setStatus(status.toUpperCase());
-        // In OrderService.updateOrderStatus()
-        if ("DELIVERED".equals(status.toUpperCase())) {
-                order.setDeliveredAt(LocalDateTime.now());
+        String newStatus = status.toUpperCase();
+        order.setStatus(newStatus);
+        
+        if ("DELIVERED".equals(newStatus)) {
+            order.setDeliveredAt(LocalDateTime.now());
         }
         orderRepository.save(order);
 
-        log.info("Order {} status: {} → {}", orderId, oldStatus, status.toUpperCase());
+        log.info("Order {} status updated: {} → {}", orderId, oldStatus, newStatus);
 
         List<OrderItem> items = orderItemRepository.findByOrderOrderId(orderId);
-        try {
-                String topic = "aura/kitchen/update-order";
-                String payload = String.format(
-                "{\"orderId\":%d,\"tableId\":%d,\"total\":%.2f,\"items\":%d}",
-                order.getOrderId(),
-                order.getTable().getTableId(),
-                order.getTotalAmount(),
-                items.size()
-                );
-                mqttPublisher.publish(topic, payload);
-                log.info("MQTT message published | topic={} | payload={}", topic, payload);
 
+        // 1. Kitchen Update (දැනට ඇති logic එක)
+        try {
+            String kitchenTopic = "aura/kitchen/update-order";
+            String kitchenPayload = String.format(
+                "{\"orderId\":%d,\"tableId\":%d,\"total\":%.2f,\"status\":\"%s\"}",
+                order.getOrderId(), order.getTable().getTableId(), order.getTotalAmount(), newStatus
+            );
+            mqttPublisher.publish(kitchenTopic, kitchenPayload);
         } catch (Exception e) {
-                log.error("Failed to publish MQTT message: {}", e.getMessage(), e);
+            log.error("Kitchen MQTT fail: {}", e.getMessage());
         }
+
+        // 2. Robot Update (පියවර 02: Robot/Pi වෙත සජීවීව දැනුම් දීම)
+        try {
+            String robotTopic = "aura/robot/" + order.getTable().getTableId() + "/status";
+            
+            Map<String, Object> payloadMap = new HashMap<>();
+            payloadMap.put("orderId", order.getOrderId());
+            payloadMap.put("tableId", order.getTable().getTableId());
+            payloadMap.put("status", newStatus);
+            
+            String robotPayload = objectMapper.writeValueAsString(payloadMap);
+            mqttGateway.sendToMqtt(robotPayload, robotTopic);
+            
+            log.info("MQTT notification sent to Robot on topic: {}", robotTopic);
+        } catch (Exception e) {
+            log.error("Failed to send MQTT status update to robot: {}", e.getMessage());
+        }
+
         return buildResponse(order, items);
     }
 
-    // ── Helpers ──────────────────────────────────────────────────────────────
+    // ── අනෙකුත් Methods (වෙනසක් නැත) ──────────────────────────────────────────
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<OrderResponse> getAllOrders() {
+        return orderRepository.findAll().stream()
+                .map(order -> buildResponse(order, orderItemRepository.findByOrderOrderId(order.getOrderId())))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public OrderResponse getOrderById(Integer orderId) {
+        Order order = findOrThrow(orderId);
+        return buildResponse(order, orderItemRepository.findByOrderOrderId(orderId));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<OrderResponse> getOrdersByTable(Integer tableId) {
+        return orderRepository.findByTableTableId(tableId).stream()
+                .map(order -> buildResponse(order, orderItemRepository.findByOrderOrderId(order.getOrderId())))
+                .collect(Collectors.toList());
+    }
 
     private Order findOrThrow(Integer orderId) {
         return orderRepository.findById(orderId)
-                .orElseThrow(() -> new EntityNotFoundException(
-                        "Order not found: " + orderId));
+                .orElseThrow(() -> new EntityNotFoundException("Order not found: " + orderId));
     }
 
     private OrderResponse buildResponse(Order order, List<OrderItem> items) {
@@ -208,23 +195,18 @@ public class OrderServiceImpl implements OrderService {
                 .tableId(order.getTable().getTableId())
                 .status(order.getStatus())
                 .totalAmount(order.getTotalAmount())
-                .orderTime(order.getOrderTime())        // ✅ fixed
-                .deliveredAt(order.getDeliveredAt())    // ✅ add this
+                .orderTime(order.getOrderTime())
+                .deliveredAt(order.getDeliveredAt())
                 .items(itemResponses)
                 .build();
     }
 
-        @Override
-        @Transactional(readOnly = true)
-        public List<OrderResponse> getDeliveredHistory(int hours) {
+    @Override
+    @Transactional(readOnly = true)
+    public List<OrderResponse> getDeliveredHistory(int hours) {
         LocalDateTime since = LocalDateTime.now().minusHours(hours);
-        return orderRepository.findDeliveredSince(since)
-                .stream()
-                .map(order -> {
-                        List<OrderItem> items =
-                                orderItemRepository.findByOrderOrderId(order.getOrderId());
-                        return buildResponse(order, items);
-                })
+        return orderRepository.findDeliveredSince(since).stream()
+                .map(order -> buildResponse(order, orderItemRepository.findByOrderOrderId(order.getOrderId())))
                 .collect(Collectors.toList());
-        }
+    }
 }
