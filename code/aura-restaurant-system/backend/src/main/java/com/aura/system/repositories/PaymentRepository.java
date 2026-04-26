@@ -41,4 +41,11 @@ public interface PaymentRepository extends JpaRepository<Payment, Integer> {
      */
     @Query("SELECT COALESCE(SUM(p.amount), 0.0) FROM Payment p WHERE p.paymentStatus = :status")
     Float sumByPaymentStatus(@Param("status") String status);
+
+    /**
+     * Get total revenue by payment status.
+     * Convenience method for dashboard stats.
+     */
+    @Query("SELECT COALESCE(SUM(p.amount), 0.0) FROM Payment p WHERE LOWER(p.paymentStatus) = LOWER(:status)")
+    Float getTotalRevenueByStatus(@Param("status") String status);
 }

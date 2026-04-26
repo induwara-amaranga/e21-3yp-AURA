@@ -80,6 +80,7 @@ export const ORDER_STATUS = {
   PREPARING: 'PREPARING',  // Kitchen accepted and is cooking
   READY:     'READY',      // Done cooking, robot picking up
   DELIVERED: 'DELIVERED',  // Robot delivered to table
+  PAID:      'PAID',       // Payment completed
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -179,7 +180,7 @@ function reducer(state, action) {
         ...state,
         orderHistory: state.orderHistory.map((o) =>
           o.tableNumber === action.payload.tableNumber && !o.isPaid
-            ? { ...o, isPaid: true, paidAt: new Date() }
+            ? { ...o, isPaid: true, paidAt: new Date(), status: ORDER_STATUS.PAID }
             : o
         ),
       };
@@ -397,9 +398,18 @@ export function RestaurantProvider({ children }) {
     }
   }, [state.orderHistory]);
 
-  const markTablePaid = useCallback((tableNumber) => {
-    // [API ENDPOINT]: POST /api/v1/payments
-    dispatch({ type: 'MARK_TABLE_PAID', payload: { tableNumber } });
+  const markTablePaid = useCallback(async (tableNumber) => {
+    try {
+      const tableId = Number(String(tableNumber).replace(/\D/g, '')) || 1;
+      const tableLabel = `T${tableId}`;   // ← always "T1", "T2", etc.
+
+      await orderAPI.markTableAsPaid(tableId);
+      dispatch({ type: 'MARK_TABLE_PAID', payload: { tableNumber: tableLabel } }); // ← use tableLabel
+      console.log(`✅ Table ${tableLabel} marked as paid`);
+    } catch (error) {
+      console.error(`Failed to mark table ${tableNumber} as paid:`, error.message || error);
+      throw error;
+    }
   }, []);
 
   const value = {

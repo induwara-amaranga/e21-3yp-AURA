@@ -58,27 +58,68 @@ export default function AdminDashboard() {
   } = useRestaurant();
   const isAdmin = session?.role === 'admin';
 
-  // Subscribe to menu updates from MQTT
+  // ── Real-time Stats State ────────────────────────────────────────────────
+  const [realtimeStats, setRealtimeStats] = useState({
+    confirmedRevenue: 0,
+    activeOrderCount: 0,
+    pendingTotal: 0,
+    robotsOnline: 0,
+    robotsTotal: ROBOTS_DATA.length,
+  });
+  const [robotFleet, setRobotFleet] = useState(ROBOTS_DATA);
+
+  // Subscribe to menu updates and real-time stats from MQTT
   useEffect(() => {
     orderMqtt.connect();
 
+    // Menu updates
     const unsubMenu = orderMqtt.onMenuUpdate((data) => {
       console.log('🍽️ Menu update received:', data);
       refreshMenu();
     });
 
+    // Dashboard stats updates (revenue, active orders, pending total)
+    const unsubStats = orderMqtt.onDashboardStats((data) => {
+      console.log('📊 Dashboard stats update received:', data);
+      setRealtimeStats((prev) => ({
+        ...prev,
+        confirmedRevenue: data.confirmedRevenue ?? prev.confirmedRevenue,
+        activeOrderCount: data.activeOrderCount ?? prev.activeOrderCount,
+        pendingTotal: data.pendingTotal ?? prev.pendingTotal,
+      }));
+    });
+
+    // Robot fleet updates
+    const unsubRobots = orderMqtt.onRobotFleetUpdate((data) => {
+      console.log('🤖 Robot fleet update received:', data);
+      if (data.robots && Array.isArray(data.robots)) {
+        setRobotFleet(data.robots);
+        const activeCount = data.robots.filter((r) => r.status !== 'charging').length;
+        setRealtimeStats((prev) => ({
+          ...prev,
+          robotsOnline: activeCount,
+          robotsTotal: data.robots.length,
+        }));
+      }
+    });
+
     return () => {
       unsubMenu();
+      unsubStats();
+      unsubRobots();
     };
   }, [refreshMenu]);
 
-  // [API ENDPOINT]: GET /api/v1/admin/revenue?status=PAID\
+  // [API ENDPOINT]: GET /api/v1/admin/revenue?status=PAID
   // [DATA SYNC]: Revenue is derived only from paid tickets so kitchen placements never inflate earnings.
-  const confirmedRevenue = getConfirmedRevenue();
+  // Falls back to computed value if MQTT stats not yet received
+  const confirmedRevenue = realtimeStats.confirmedRevenue || getConfirmedRevenue();
 
   // [API ENDPOINT]: GET /api/v1/admin/stats
   // [DATA SYNC]: Pending total tracks kitchen-sent but unpaid orders for accurate outstanding exposure.
-  const pendingOrderTotal = getPendingOrderTotal();
+  // Falls back to computed value if MQTT stats not yet received
+  const pendingOrderTotal = realtimeStats.pendingTotal || getPendingOrderTotal();
+  const activeOrderCount = realtimeStats.activeOrderCount || activeOrders.length;
 
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'menu'
 
@@ -94,10 +135,10 @@ export default function AdminDashboard() {
   const [formError, setFormError]   = useState('');
   const [formSuccess, setFormSuccess] = useState('');
 
-  // ── Stats for overview ────────────────────────────────────────────────────
-  // [BACKEND INTEGRATION: TODO] - GET /api/analytics
-  // Description: Replace these computed values with data returned by the analytics endpoint.
-  //   Expected fields: { totalRevenue, ordersToday, avgDeliveryTime, activeRobots }
+  // ── Stats for overview (Updated in real-time via MQTT) ───────────────────
+  // [MQTT TOPICS]: aura/admin/stats, aura/admin/robots
+  // Description: Stats are now updated in real-time via MQTT messages from backend
+  //   Expected fields: { confirmedRevenue, activeOrderCount, pendingTotal, robots[] }
   const stats = [
     {
       label: 'Confirmed Revenue',
@@ -106,7 +147,7 @@ export default function AdminDashboard() {
     },
     {
       label: 'Active Orders',
-      value: activeOrders.length,
+      value: activeOrderCount,
       change: 'Live', up: true, icon: ShoppingBag, color: 'from-aura-500 to-aura-400',
     },
     {
@@ -116,7 +157,7 @@ export default function AdminDashboard() {
     },
     {
       label: 'Robots Active',
-      value: `${ROBOTS_DATA.filter((r) => r.status !== 'charging').length}/${ROBOTS_DATA.length}`,
+      value: `${realtimeStats.robotsOnline}/${realtimeStats.robotsTotal}`,
       change: 'Online', up: true, icon: Bot, color: 'from-amber-500 to-yellow-400',
     },
   ];
@@ -303,7 +344,7 @@ export default function AdminDashboard() {
                 </Card>
               </div>
 
-              {/* Robot Fleet */}
+              {/* Robot Fleet (Real-time updates via MQTT) */}
               <div>
                 <Card hover={false} className="p-0 overflow-hidden">
                   <div className="px-6 py-4 border-b border-dark-700/50">
@@ -313,7 +354,7 @@ export default function AdminDashboard() {
                     </h2>
                   </div>
                   <div className="p-4 space-y-3">
-                    {ROBOTS_DATA.map((robot) => (
+                    {robotFleet.map((robot) => (
                       <div key={robot.id}
                            className="glass-light rounded-xl p-4 hover:neon-border transition-all duration-300">
                         <div className="flex items-center justify-between mb-2">

@@ -9,6 +9,8 @@ class KitchenMqttService {
       onNewOrder: [],
       onOrderStatusUpdate: [],
       onMenuUpdate: [],
+      onDashboardStats: [],
+      onRobotFleetUpdate: [],
       onError: [],
     };
   }
@@ -30,6 +32,9 @@ class KitchenMqttService {
       this.client.subscribe('aura/kitchen/update-order');  // ← Backend publishes here
       this.client.subscribe('aura/table/+/order/response');
       this.client.subscribe('aura/menu/updated');
+      // Subscribe to dashboard real-time stats
+      this.client.subscribe('aura/admin/stats');
+      this.client.subscribe('aura/admin/robots');
     });
 
     this.client.on('message', (topic, message) => {
@@ -45,6 +50,10 @@ class KitchenMqttService {
           this.listeners.onOrderStatusUpdate.forEach(cb => cb(data));
         } else if (topic === 'aura/menu/updated') {
           this.listeners.onMenuUpdate.forEach(cb => cb(data));
+        } else if (topic === 'aura/admin/stats') {
+          this.listeners.onDashboardStats.forEach(cb => cb(data));
+        } else if (topic === 'aura/admin/robots') {
+          this.listeners.onRobotFleetUpdate.forEach(cb => cb(data));
         }
       } catch (e) {
         console.error('Failed to parse MQTT message:', e);
@@ -88,6 +97,22 @@ class KitchenMqttService {
     return () => {
       this.listeners.onMenuUpdate =
         this.listeners.onMenuUpdate.filter(cb => cb !== callback);
+    };
+  }
+
+  onDashboardStats(callback) {
+    this.listeners.onDashboardStats.push(callback);
+    return () => {
+      this.listeners.onDashboardStats =
+        this.listeners.onDashboardStats.filter(cb => cb !== callback);
+    };
+  }
+
+  onRobotFleetUpdate(callback) {
+    this.listeners.onRobotFleetUpdate.push(callback);
+    return () => {
+      this.listeners.onRobotFleetUpdate =
+        this.listeners.onRobotFleetUpdate.filter(cb => cb !== callback);
     };
   }
 

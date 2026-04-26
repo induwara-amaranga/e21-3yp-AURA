@@ -16,4 +16,6 @@ public interface RestaurantTableRepository extends JpaRepository<RestaurantTable
 
     // Find by table number
     RestaurantTable findByTableNumber(String tableNumber);
+
+    
 }
