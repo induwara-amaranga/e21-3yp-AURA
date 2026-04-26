@@ -75,17 +75,20 @@ export default function KitchenDisplay() {
 
   // MQTT listener for new orders
   useEffect(() => {
+    // ✅ FIXED: Connect once and keep alive (don't disconnect on unmount)
+    // Only ONE connection per app lifetime, not per component
     orderMqtt.connect();
 
     const unsubNewOrder = orderMqtt.onNewOrder(async (mqttData) => {
-      console.log('🔔 New order notification:', mqttData);
+      console.log('🔔 New order notification via MQTT:', mqttData);
       // Refresh orders from backend to get full data
       await refreshOrders();
     });
 
+    // ✅ FIXED: Only unsubscribe, don't disconnect entire MQTT service
     return () => {
       unsubNewOrder();
-      orderMqtt.disconnect();
+      // Don't call orderMqtt.disconnect() — it closes the connection for all listeners
     };
   }, [refreshOrders]);
   // Only show non-delivered tickets on KDS live board

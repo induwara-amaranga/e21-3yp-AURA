@@ -19,16 +19,18 @@ class KitchenMqttService {
     if (this.connected) return;
 
     // WebSocket port 9001 — not TCP 1883
-    this.client = mqtt.connect('ws://localhost:9001');
+    this.client = mqtt.connect('ws://localhost:9001', {
+      reconnectPeriod: 5000,
+      connectTimeout: 10000,
+    });
 
     this.client.on('connect', () => {
       console.log('✅ MQTT connected via WebSocket');
       this.connected = true;
 
-      // Subscribe to kitchen topic
-      this.client.subscribe('aura/kitchen/new-order');
+      // Subscribe to kitchen topic — FIXED: must match backend topic exactly
+      this.client.subscribe('aura/kitchen/update-order');  // ← Backend publishes here
       this.client.subscribe('aura/table/+/order/response');
-      // Subscribe to menu updates
       this.client.subscribe('aura/menu/updated');
       // Subscribe to dashboard real-time stats
       this.client.subscribe('aura/admin/stats');
@@ -40,7 +42,9 @@ class KitchenMqttService {
         const data = JSON.parse(message.toString());
         console.log('📦 MQTT message received:', topic, data);
 
+        // ✅ FIXED: Now correctly matches the backend topic
         if (topic === 'aura/kitchen/update-order') {
+          console.log('🔔 New order notification via MQTT');
           this.listeners.onNewOrder.forEach(cb => cb(data));
         } else if (topic.includes('/order/response')) {
           this.listeners.onOrderStatusUpdate.forEach(cb => cb(data));
@@ -64,6 +68,11 @@ class KitchenMqttService {
 
     this.client.on('reconnect', () => {
       console.log('🔄 MQTT reconnecting...');
+    });
+
+    this.client.on('offline', () => {
+      console.warn('⚠️ MQTT offline');
+      this.connected = false;
     });
   }
 

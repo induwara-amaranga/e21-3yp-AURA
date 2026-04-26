@@ -188,7 +188,7 @@ export default function RobotUI() {
     if (!draft.length) return;
 
     // A. Original UI/Context Logic
-    placeOrder(table, draft, hasActiveSession);
+    //placeOrder(table, draft, hasActiveSession);
 
     // B. WebSocket Logic: Send to Robot Controller
     sendOrderToRobot(table, draft);
@@ -198,7 +198,7 @@ export default function RobotUI() {
 
   const paySuccess = () => {
     if (draft.length > 0) {
-      placeOrder(table, draft, hasActiveSession);
+      //placeOrder(table, draft, hasActiveSession);
       sendOrderToRobot(table, draft); // Ensure last minute additions go to robot
     }
     markTablePaid(table);
