@@ -25,6 +25,7 @@ const STATUS_CFG = {
   PREPARING: { label: 'Kitchen is Preparing…',    icon: ChefHat,     color: 'text-amber-400',  bg: 'bg-amber-500/10',  ring: 'ring-amber-500/25'  },
   READY:     { label: 'Robot is Delivering! 🤖',  icon: Bike,        color: 'text-orange-400', bg: 'bg-orange-500/10', ring: 'ring-orange-500/25' },
   DELIVERED: { label: 'Delivered! Enjoy 🎉',      icon: PartyPopper, color: 'text-emerald-400',bg: 'bg-emerald-500/10',ring: 'ring-emerald-500/25'},
+  PAID:      { label: 'Payment Completed! 💳',    icon: CreditCard,  color: 'text-green-400',  bg: 'bg-green-500/10',  ring: 'ring-green-500/25'  },
 };
 
 const UPSELLS = [
@@ -196,14 +197,20 @@ export default function RobotUI() {
     setDraft([]);
   };
 
-  const paySuccess = () => {
+  const paySuccess = async () => {
     if (draft.length > 0) {
       //placeOrder(table, draft, hasActiveSession);
       sendOrderToRobot(table, draft); // Ensure last minute additions go to robot
     }
-    markTablePaid(table);
-    setShowPay(false);
-    setDraft([]);
+    try {
+      await markTablePaid(table);
+      setShowPay(false);
+      setDraft([]);
+    } catch (error) {
+      console.error('Failed to mark table as paid:', error);
+      // Still close modal but show error
+      setShowPay(false);
+    }
   };
 
   const addRecommendationToDraft = useCallback((menuItem) => {

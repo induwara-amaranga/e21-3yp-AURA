@@ -11,4 +11,6 @@ public interface OrderService {
     OrderResponse updateOrderStatus(Integer orderId, String status);
     List<OrderResponse> getAllOrders();
     List<OrderResponse> getDeliveredHistory(int hours);
+
+    void markTableAsPaid(Integer tableId);
 }

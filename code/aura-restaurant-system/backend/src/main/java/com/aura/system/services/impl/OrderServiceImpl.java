@@ -16,8 +16,11 @@ import com.fasterxml.jackson.databind.ObjectMapper; // JSON සඳහා
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.apache.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -225,5 +228,22 @@ public class OrderServiceImpl implements OrderService {
         return orderRepository.findDeliveredSince(since).stream()
                 .map(order -> buildResponse(order, orderItemRepository.findByOrderOrderId(order.getOrderId())))
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public void markTableAsPaid(Integer tableId) {
+        List<Order> unpaidOrders = orderRepository
+                .findUnpaidByTableId(tableId, "PAID");
+
+        if (unpaidOrders.isEmpty()) {
+            log.info("No unpaid orders found for table {}", tableId);
+            // throw new ResponseStatusException(
+            //         HttpStatus.SC_NOT_FOUND,
+            //         "No unpaid orders found for table " + tableId);
+        }
+
+        unpaidOrders.forEach(order -> order.setStatus("PAID"));
+        orderRepository.saveAll(unpaidOrders);
     }
 }

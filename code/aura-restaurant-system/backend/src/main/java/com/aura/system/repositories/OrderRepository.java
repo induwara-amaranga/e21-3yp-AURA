@@ -64,4 +64,12 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
     ORDER BY o.deliveredAt DESC
     """)
     List<Order> findDeliveredSince(@Param("since") LocalDateTime since);
+
+    @Query("SELECT o FROM Order o WHERE o.table.tableId = :tableId AND o.status <> :status")
+    List<Order> findUnpaidByTableId(
+        @Param("tableId") Integer tableId,
+        @Param("status") String status
+    );
+
+    
 }

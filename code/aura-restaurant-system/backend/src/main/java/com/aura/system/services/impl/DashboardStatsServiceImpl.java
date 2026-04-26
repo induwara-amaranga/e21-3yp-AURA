@@ -60,9 +60,11 @@ public class DashboardStatsServiceImpl implements DashboardStatsService {
 
         try {
             // 1. Confirmed Revenue — Sum of paid payments
-            Float confirmedRevenue = paymentRepository.getTotalRevenueByStatus("paid");
-            if (confirmedRevenue == null) {
-                confirmedRevenue = 0.0f;
+            // 1. Confirmed Revenue — Sum of PAID orders
+            float confirmedRevenue = 0.0f;
+            var paidOrders = orderRepository.findByStatus("PAID");
+            for (var order : paidOrders) {
+                confirmedRevenue += order.getTotalAmount() != null ? order.getTotalAmount() : 0.0f;
             }
             stats.put("confirmedRevenue", confirmedRevenue);
 

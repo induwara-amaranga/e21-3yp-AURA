@@ -96,6 +96,20 @@ export const orderAPI = {
       throw error;
     }
   },
+
+  /**
+   * Mark all unpaid orders for a table as PAID
+   * @param {number} tableId - Table ID
+   */
+  markTableAsPaid: async (tableId) => {
+    try {
+      const response = await axiosInstance.post(`/orders/table/${tableId}/mark-paid`);
+      return response.data;
+    } catch (error) {
+      console.error(`Failed to mark table ${tableId} as paid:`, error.response?.data || error.message);
+      throw error;
+    }
+  },
 };
 
 export default orderAPI;

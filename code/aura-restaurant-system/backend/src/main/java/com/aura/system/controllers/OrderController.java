@@ -61,5 +61,13 @@ public class OrderController {
     public ResponseEntity<List<OrderResponse>> getDeliveredHistory(
             @RequestParam(defaultValue = "24") int hours) {
         return ResponseEntity.ok(orderService.getDeliveredHistory(hours));
+
+    }
+    // POST /api/orders/table/{tableId}/mark-paid
+    @PostMapping("/table/{tableId}/mark-paid")
+    public ResponseEntity<Void> markTableAsPaid(
+            @PathVariable Integer tableId) {
+        orderService.markTableAsPaid(tableId);
+        return ResponseEntity.ok().build();
     }
 }
