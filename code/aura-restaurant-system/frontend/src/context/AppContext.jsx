@@ -305,13 +305,19 @@ const login = useCallback(async (username, password) => {
   setLoginError('');
   try {
     const response = await authAPI.login(username.trim().toLowerCase(), password);
-    
+
+    const role = String(response.role || '').toLowerCase();
+    const normalizedUsername = String(response.username || '').toLowerCase();
+    const tableMatch = normalizedUsername.match(/(\d+)/);
+    const tableNumber = role === 'table' && tableMatch ? `T${tableMatch[1]}` : null;
+
     // Backend returns flat: { token, username, role, expiresIn }
-    // There is no response.user — map it manually
+    // Map to frontend session shape expected by Robot UI routing.
     const session = {
       username: response.username,
-      role: response.role.toLowerCase(), // 'KITCHEN' → 'kitchen'
+      role,
       token: response.token,
+      tableNumber,
     };
 
     setSession(session);

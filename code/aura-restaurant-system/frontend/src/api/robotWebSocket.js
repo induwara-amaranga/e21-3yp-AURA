@@ -2,6 +2,20 @@
 
 let socket;
 
+function normalizeTableId(rawTableId) {
+    if (rawTableId == null) return null;
+    if (typeof rawTableId === 'number') {
+        return Number.isInteger(rawTableId) && rawTableId > 0 ? rawTableId : null;
+    }
+
+    const text = String(rawTableId).trim();
+    const digits = text.replaceAll(/\D/g, '');
+    if (!digits) return null;
+
+    const parsed = Number.parseInt(digits, 10);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 export const connectToRobot = () => {
     // Raspberry Pi එකේ IP ලිපිනය මෙතනට ලබා දෙන්න.
     // උදා: 'ws://192.168.1.100:8765'
@@ -21,15 +35,23 @@ export const connectToRobot = () => {
 };
 
 export const sendOrderToRobot = (tableId, items) => {
-    if (socket && socket.readyState === WebSocket.OPEN) {
-        // 1. "T1" -> 1 ලෙස අංකයක් බවට පත් කිරීම
-        const numericTableId = parseInt(tableId.replace(/\D/g, ""), 10);
+    if (socket?.readyState === WebSocket.OPEN) {
+        const numericTableId = normalizeTableId(tableId);
+        if (!numericTableId) {
+            console.error('Cannot send order: invalid tableId', tableId);
+            return;
+        }
 
-        // 2. Backend එක බලාපොරොත්තු වන පරිදි Items සකස් කිරීම
+        // Backend එක බලාපොරොත්තු වන පරිදි Items සකස් කිරීම
         const mappedItems = items.map(item => ({
             menuItemId: item.id, // Frontend එකේ 'id' යනු Backend එකේ 'menuItemId' ය
             quantity: item.quantity
-        }));
+        })).filter(item => Number.isInteger(item.menuItemId) && item.quantity > 0);
+
+        if (!mappedItems.length) {
+            console.error('Cannot send order: no valid order items');
+            return;
+        }
 
         const payload = {
             type: 'PLACE_ORDER',
