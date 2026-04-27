@@ -781,13 +781,16 @@ footer{background:var(--bg2);border-top:1px solid var(--border);padding:52px 0 2
 <!-- ═══════════════════════════════════════════════════════
      §8  BUDGET
      ═══════════════════════════════════════════════════════ -->
+<!-- ═══════════════════════════════════════════════════════
+     §8  BUDGET
+     ═══════════════════════════════════════════════════════ -->
 <hr class="sep">
 <section id="budget" class="sec">
   <div class="wrap">
     <div class="text-center rv" style="margin-bottom:48px;">
       <div class="sec-label">Financials</div>
       <h2 class="sec-title">Project <span class="gradient-text">Budget</span></h2>
-      <p class="sec-sub">Detailed component-level cost breakdown for one AURA robotic unit.</p>
+      <p class="sec-sub">Final self-funded component cost breakdown for one AURA robotic unit.</p>
     </div>
 
     <div class="budget-wrap rv">
@@ -803,33 +806,41 @@ footer{background:var(--bg2);border-top:1px solid var(--border);padding:52px 0 2
             </tr>
           </thead>
           <tbody>
-            <tr><td>1</td><td>Raspberry Pi 4B (4 GB)</td><td>1</td><td>28,000</td><td>28,000</td></tr>
-            <tr><td>2</td><td>7-inch IPS Touch Display</td><td>1</td><td>15,000</td><td>15,000</td></tr>
-            <tr><td>3</td><td>Raspberry Pi Camera Module (V2)</td><td>1</td><td>6,000</td><td>6,000</td></tr>
-            <tr><td>4</td><td>Pan/Tilt Servo Mechanism</td><td>1</td><td>1,500</td><td>1,500</td></tr>
-            <tr><td>5</td><td>Servo Motors (MG90S)</td><td>2</td><td>1,500</td><td>3,000</td></tr>
-            <tr><td>6</td><td>2W Speaker (MIT M38)</td><td>1</td><td>1,200</td><td>1,200</td></tr>
-            <tr><td>7</td><td>Lithium-ion Battery (10,000 mAh)</td><td>1</td><td>5,000</td><td>5,000</td></tr>
-            <tr><td>8</td><td>18650 UPS Shield X703</td><td>1</td><td>6,500</td><td>6,500</td></tr>
-            <tr><td>9</td><td>0.9" TFT Display</td><td>2</td><td>890</td><td>1,780</td></tr>
-            <tr><td>10</td><td>MPR121 Capacitive Touch Controller</td><td>1</td><td>540</td><td>540</td></tr>
-            <tr class="budget-total"><td></td><td colspan="3">Grand Total</td><td>68,520</td></tr>
+            <tr><td>1</td><td>5 inch 800×480 HDMI TFT LCD Touch Screen</td><td>1</td><td>9,950.00</td><td>9,950.00</td></tr>
+            <tr><td>2</td><td>HDMI Cable</td><td>1</td><td>1,400.00</td><td>1,400.00</td></tr>
+            <tr><td>3</td><td>0.96 inch 128×64 OLED Display Module</td><td>2</td><td>600.00</td><td>1,200.00</td></tr>
+            <tr><td>4</td><td>Servo Motor Metal Wheel MG90 Full Set</td><td>2</td><td>580.00</td><td>1,160.00</td></tr>
+            <tr><td>5</td><td>Servo Motor Driver 16-Channel PCA9685 I2C</td><td>1</td><td>1,060.00</td><td>1,060.00</td></tr>
+            <tr><td>6</td><td>4 Ohm 5W Speaker 1.5 inch</td><td>1</td><td>980.00</td><td>980.00</td></tr>
+            <tr><td>7</td><td>USB Microphone Dongle Raspberry Pi PC</td><td>1</td><td>850.00</td><td>850.00</td></tr>
+            <tr><td>8</td><td>Stepper Motor + ULN2003 Driver (5V)</td><td>1</td><td>595.00</td><td>595.00</td></tr>
+            <tr><td>9</td><td>5V 3A SMPS Power Adapter</td><td>1</td><td>570.00</td><td>570.00</td></tr>
+            <tr><td>10</td><td>TPA3118 BTL 60W Mono Digital Audio Amp</td><td>1</td><td>520.00</td><td>520.00</td></tr>
+            <tr><td>11</td><td>TTP223 1-Channel Digital Capacitive Touch</td><td>5</td><td>60.00</td><td>300.00</td></tr>
+            <tr><td>12</td><td>2-Axis Servo Bracket (Camera Mount)</td><td>1</td><td>270.00</td><td>270.00</td></tr>
+            <tr><td>13</td><td>HDMI Jointer</td><td>1</td><td>250.00</td><td>250.00</td></tr>
+            <tr><td>14</td><td>8-Channel Bi-Directional Logic Level Converter</td><td>1</td><td>170.00</td><td>170.00</td></tr>
+            <tr><td>15</td><td>DC Jack Barrel Connector Female</td><td>1</td><td>30.00</td><td>30.00</td></tr>
+            <tr class="budget-subtotal"><td></td><td colspan="3">Previous Total (Incl. Pi &amp; Camera)</td><td>48,395.00</td></tr>
+            <tr class="budget-deduct"><td></td><td>Raspberry Pi 4B (8GB) — Dept. Provided</td><td>1</td><td></td><td>− 28,000.00</td></tr>
+            <tr class="budget-deduct"><td></td><td>Pi Camera Module (V2) — Dept. Provided</td><td>1</td><td></td><td>− 1,190.00</td></tr>
+            <tr class="budget-total"><td></td><td colspan="3">Final Accurate Total (Your Cost)</td><td>19,205.00</td></tr>
           </tbody>
         </table>
       </div>
 
       <div class="budget-summary rv">
         <div class="bs-card">
-          <div class="bv" style="color:var(--primary);">LKR 68,520</div>
-          <div class="bl">Total Per Unit</div>
+          <div class="bv" style="color:var(--primary);">LKR 19,205</div>
+          <div class="bl">Your Final Cost</div>
         </div>
         <div class="bs-card">
-          <div class="bv" style="color:var(--cyan);">10</div>
+          <div class="bv" style="color:var(--cyan);">15</div>
           <div class="bl">Components</div>
         </div>
         <div class="bs-card">
-          <div class="bv" style="color:var(--green);">40.9%</div>
-          <div class="bl">Computing (RPi 4)</div>
+          <div class="bv" style="color:var(--green);">LKR 29,190</div>
+          <div class="bl">Dept. Covered</div>
         </div>
       </div>
     </div>
