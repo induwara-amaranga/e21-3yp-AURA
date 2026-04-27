@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AURA - Intelligent Robotic Dining Platform</title>
+<title>AURA</title>
 <link rel="icon" href="images/logo-removebg.png">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
@@ -589,21 +589,21 @@ footer{background:var(--bg2);border-top:1px solid var(--border);padding:52px 0 2
           <div class="ld" style="background:var(--primary);box-shadow:0 0 8px var(--primary-glow);"></div>
           <h5 style="margin:0;">Layer 1 - Robot Nodes</h5>
         </div>
-        <p>RPi 4 powered units at each table. Handles UI rendering, computer vision, servo control, and PIR detection autonomously.</p>
+        <p>Raspberry Pi 4 (8GB) units at each table with 5" touchscreen, camera, OLED displays, servo motors, and PIR sensors. Handles UI rendering, computer vision, motion control, voice input, and face detection autonomously.</p>
       </div>
       <div class="lc" style="--lc:var(--cyan);">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
           <div class="ld" style="background:var(--cyan);box-shadow:0 0 8px rgba(0,229,255,.4);"></div>
           <h5 style="margin:0;">Layer 2 - MQTT Broker</h5>
         </div>
-        <p>Paho-MQTT pub/sub messaging over Wi-Fi. Real-time order events flow between all robot nodes and the central server.</p>
+        <p>Mosquitto MQTT broker over Wi-Fi coordination. Enables real-time pub/sub messaging between robot nodes, WebSocket communication for live dashboard updates, and Kitchen Display System notifications.</p>
       </div>
       <div class="lc" style="--lc:var(--green);">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
           <div class="ld" style="background:var(--green);box-shadow:0 0 8px rgba(0,255,178,.3);"></div>
           <h5 style="margin:0;">Layer 3 - Central Server</h5>
         </div>
-        <p>AWS-hosted backend with PostgreSQL. Aggregates orders, powers kitchen display, owner dashboard, and exposes REST APIs.</p>
+        <p>Spring Boot backend on AWS EC2 with PostgreSQL database. Aggregates orders, powers kitchen display, admin dashboard, payment gateway, and REST APIs. Maintains persistent order history and analytics.</p>
       </div>
     </div>
   </div>
@@ -650,7 +650,7 @@ footer{background:var(--bg2);border-top:1px solid var(--border);padding:52px 0 2
           <div class="sn">04</div>
           <div class="si" style="background:var(--green-dim);color:var(--green);"><i class="bi bi-display-fill"></i></div>
           <h4>Kitchen Notified</h4>
-          <p>Flask server receives, stores in SQLite, and pushes to the kitchen display. AURA confirms with lights &amp; voice.</p>
+          <p>Backend receives order via MQTT+WebSocket, stores in PostgreSQL, and pushes real-time updates to the kitchen display dashboard. AURA confirms with lights &amp; voice.</p>
         </div>
       </div>
     </div>
@@ -761,21 +761,23 @@ footer{background:var(--bg2);border-top:1px solid var(--border);padding:52px 0 2
         </div>
       </div>
     </div>
-    <!-- Hardware table full-width, 2 components per row -->
-<p class="cl rv" style="text-align:center;margin-bottom:12px;">Hardware Components</p>
-    <div class="rv" style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden;">
-      <table class="sptb">
-        <thead><tr><th>Component</th><th>Specification</th><th>Component</th><th>Specification</th></tr></thead>
-        <tbody>
-          <tr><td>CPU</td><td>Raspberry Pi 4B (8 GB)</td><td>Audio Amp</td><td>TPA3118 BTL 60W Mono Digital</td></tr>
-          <tr><td>Display</td><td>5" 800×480 HDMI TFT LCD Touch</td><td>Microphone</td><td>USB Microphone Dongle</td></tr>
-          <tr><td>Camera</td><td>RPi Camera Module V2</td><td>Touch</td><td>TTP223 1-Ch Capacitive ×5</td></tr>
-          <tr><td>OLED</td><td>0.96" 128×64 OLED Module ×2</td><td>Stepper</td><td>Stepper Motor + ULN2003 (5V)</td></tr>
-          <tr><td>Servo Motors</td><td>MG90 Metal Wheel Full Set ×2</td><td>Camera Mount</td><td>2-Axis Servo Bracket</td></tr>
-          <tr><td>Servo Driver</td><td>PCA9685 16-Ch I2C</td><td>Power</td><td>5V 3A SMPS Power Adapter</td></tr>
-          <tr><td>Speaker</td><td>4Ω 5W 1.5" Speaker</td><td>Logic</td><td>8-Ch Bi-Dir Level Converter</td></tr>
-        </tbody>
-      </table>
+    <!-- Hardware table full-width -->
+    <div class="rv" style="margin-bottom:0;">
+      <p class="cl" style="text-align:center;margin-bottom:16px;">Hardware Specifications</p>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden;">
+        <table class="sptb">
+          <thead><tr><th>Component</th><th>Specification</th><th>Component</th><th>Specification</th></tr></thead>
+          <tbody>
+            <tr><td>Processor</td><td>Raspberry Pi 4B (8 GB RAM)</td><td>Audio Amplifier</td><td>TPA3118 BTL 60W Mono Digital</td></tr>
+            <tr><td>Primary Display</td><td>5" 800×480 HDMI TFT LCD Touch Screen</td><td>Microphone Input</td><td>USB Microphone Dongle</td></tr>
+            <tr><td>Computer Vision</td><td>RPi Camera Module V2 (8MP)</td><td>Touch Sensors</td><td>TTP223 1-Ch Capacitive Buttons ×5</td></tr>
+            <tr><td>Status Displays</td><td>0.96" 128×64 OLED Module ×2</td><td>Pan-Tilt Movement</td><td>Stepper Motor + ULN2003 Driver (5V)</td></tr>
+            <tr><td>Head Movement</td><td>MG90 Metal Servo Motors ×2 Full Set</td><td>Camera Bracket</td><td>2-Axis Servo Pan-Tilt Mount</td></tr>
+            <tr><td>Servo PWM Control</td><td>PCA9685 16-Channel I2C Driver</td><td>Power Supply</td><td>5V 3A SMPS Power Adapter</td></tr>
+            <tr><td>Audio Output</td><td>4Ω 5W 1.5" Speaker</td><td>Logic Level Shifting</td><td>8-Channel Bi-Directional Level Converter</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </section>
@@ -926,13 +928,11 @@ footer{background:var(--bg2);border-top:1px solid var(--border);padding:52px 0 2
       <h3 style="font-size:1.5rem;">Supervised By</h3>
     </div>
     <div class="row rv" style="justify-content:center;margin-bottom:44px;">
-      <div class="col-half" style="max-width:480px;">
-        <div class="supc">
-          <div class="supi"><img src="images/yashoda_madam.jpeg" alt="Ms. Yasodha Vimukthi" style="width:100%;height:100%;border-radius:12px;object-fit:cover;"></div>
-          <div>
-            <h5 style="font-weight:700;margin-bottom:3px;">Ms. Yasodha Vimukthi</h5>
-            <p style="color:var(--muted);font-size:.84rem;margin:0;">Lecturer, University of Peradeniya</p>
-          </div>
+      <div class="col-half" style="max-width:540px;">
+        <div style="display:flex;flex-direction:column;align-items:center;text-align:center;">
+          <div style="width:140px;height:140px;border-radius:16px;overflow:hidden;margin-bottom:20px;border:2px solid var(--primary);box-shadow:0 8px 24px rgba(255,107,53,.2);"><img src="images/yashoda_madam.jpeg" alt="Ms. Yasodha Vimukthi" style="width:100%;height:100%;object-fit:cover;"></div>
+          <h5 style="font-weight:700;margin-bottom:6px;font-size:1.1rem;">Ms. Yasodha Vimukthi</h5>
+          <p style="color:var(--muted);font-size:.92rem;margin:0;">Lecturer, Department of Computer Engineering<br>University of Peradeniya</p>
         </div>
       </div>
     </div>
