@@ -34,35 +34,39 @@ export const connectToRobot = () => {
     };
 };
 
-export const sendOrderToRobot = (tableId, items) => {
+export const sendOrderToRobot = async (tableId, items, placeOrderFn, onDone) => {
+  try {
+    // 1. Save to backend (same as placeOrder)
+    const order = await placeOrderFn();
+    console.log('✅ Order saved to backend:', order.id);
+
+    // 2. Send to robot via WebSocket
     if (socket?.readyState === WebSocket.OPEN) {
-        const numericTableId = normalizeTableId(tableId);
-        if (!numericTableId) {
-            console.error('Cannot send order: invalid tableId', tableId);
-            return;
-        }
+      const numericTableId = normalizeTableId(tableId);
+      const mappedItems = items.map(item => ({
+        menuItemId: item.id,
+        quantity: item.quantity,
+      })).filter(item => Number.isInteger(item.menuItemId) && item.quantity > 0);
 
-        // Backend එක බලාපොරොත්තු වන පරිදි Items සකස් කිරීම
-        const mappedItems = items.map(item => ({
-            menuItemId: item.id, // Frontend එකේ 'id' යනු Backend එකේ 'menuItemId' ය
-            quantity: item.quantity
-        })).filter(item => Number.isInteger(item.menuItemId) && item.quantity > 0);
+      const payload = {
+        type: 'PLACE_ORDER',
+        tableId: numericTableId,
+        orderId: order.id,
+        items: mappedItems,
+      };
 
-        if (!mappedItems.length) {
-            console.error('Cannot send order: no valid order items');
-            return;
-        }
-
-        const payload = {
-            type: 'PLACE_ORDER',
-            tableId: numericTableId,
-            items: mappedItems
-        };
-
-        socket.send(JSON.stringify(payload));
-        console.log("Mapped Order sent to Robot:", payload);
+      socket.send(JSON.stringify(payload));
+      console.log('🤖 Order sent to Robot:', payload);
     } else {
-        console.error("WebSocket is not connected!");
+      console.warn('WebSocket not connected — robot not notified');
     }
-};
 
+    // 3. Callback after both done
+    if (typeof onDone === 'function') onDone();
+
+    return order;
+  } catch (error) {
+    console.error('Failed to place order or notify robot:', error);
+    throw error;
+  }
+};

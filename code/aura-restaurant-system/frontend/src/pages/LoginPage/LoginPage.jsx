@@ -26,7 +26,7 @@ import { Zap, User, Lock, Eye, EyeOff, Bot } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 
 export default function LoginPage() {
-  const { login, loginError } = useAppContext();
+  const { login, loginError, startNewCustomer, session, } = useAppContext();
 
   const [username, setUsername]       = useState('');
   const [password, setPassword]       = useState('');
@@ -170,6 +170,34 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+
+          {/* ── New Customer Button ── */}
+          {session && session.role === 'table' && session.tableNumber && (
+            <div className="mt-6 pt-6 border-t border-white/5">
+              <button
+                id="new-customer-btn"
+                type="button"
+                onClick={() => {
+                  if (startNewCustomer(session.tableNumber)) {
+                    // Start new session — Robot UI will filter out old orders
+                    window.location.reload();
+                  }
+                }}
+                className="w-full py-3 rounded-2xl font-bold text-sm text-white
+                           bg-gradient-to-r from-sky-500 to-sky-600
+                           hover:from-sky-400 hover:to-sky-500
+                           shadow-lg shadow-sky-500/20
+                           active:scale-95
+                           transition-all duration-200 flex items-center justify-center gap-2"
+              >
+                <User size={18} />
+                New Customer — Clear Current Order
+              </button>
+              <p className="text-center text-dark-500 text-xs mt-2">
+                Start fresh for next customer at {session.tableNumber}
+              </p>
+            </div>
+          )}
 
           {/* ── Dev Quick-Fill Panel (remove in production) ── */}
           <details className="mt-8">
