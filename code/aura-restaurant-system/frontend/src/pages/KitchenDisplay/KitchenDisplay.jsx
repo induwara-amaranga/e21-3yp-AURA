@@ -82,6 +82,12 @@ export default function KitchenDisplay() {
     const unsubNewOrder = orderMqtt.onNewOrder(async (mqttData) => {
       console.log('🔔 New order notification via MQTT:', mqttData);
       // Refresh orders from backend to get full data
+      // Only refresh for genuinely new orders (status PENDING)
+      // Ignore status update echoes from kitchen's own actions
+      if (mqttData?.status && mqttData.status !== 'PENDING') {
+        console.log('⏭️ Skipping refresh — status update echo, not a new order');
+        return;
+      }
       await refreshOrders();
     });
 

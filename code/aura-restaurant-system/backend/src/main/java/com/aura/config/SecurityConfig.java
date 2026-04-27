@@ -66,9 +66,9 @@ public class SecurityConfig {
                 .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                 .requestMatchers("/api/images/**").permitAll()
                 // Kitchen role — update order status only
-                //.requestMatchers("/api/orders/*/status").hasAnyRole("KITCHEN", "ADMIN")
+                //.requestMatchers("/api/orders/*/status").hasAnyRole("KITCHEN", "ADMIN","TABLE")
                 // Staff role — payments and table management
-                //.requestMatchers("/api/payments/**", "/api/tables/**").hasAnyRole("STAFF", "ADMIN")
+                //.requestMatchers("/api/payments/**", "/api/tables/**").hasAnyRole(, "ADMIN")
                 // Admin only
                 //.requestMatchers("/api/admin/**").hasRole("ADMIN")
                 // Everything else requires a valid JWT
