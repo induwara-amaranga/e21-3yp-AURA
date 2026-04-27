@@ -326,8 +326,28 @@ export function RestaurantProvider({ children }) {
     };
 
     try {
-      const response = await orderAPI.placeOrder(payload);
-      const order = normalizeBackendOrder(response);
+      //const response = await orderAPI.placeOrder(payload);
+      //const order = normalizeBackendOrder(response);
+      const order = {
+    id: Date.now(),           // ← always unique, no ticketCounter needed
+    tableNumber: `T${tableId}`,
+    ticketNum: Date.now(),
+    items: items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      quantity: item.quantity,
+      price: item.price,
+      imageFilename: item.imageFilename || '',
+      customization: item.customization || '',
+    })),
+    status: ORDER_STATUS.PENDING,
+    total: items.reduce((s, i) => s + i.price * i.quantity, 0),
+    isPaid: false,
+    isAddon,
+    createdAt: new Date(),
+    deliveredAt: null,
+    paidAt: null,
+  };
       
       // ✅ FIXED: Check if order already exists before adding (deduplication)
       const orderExists = state.orderHistory.some(o => o.id === order.id);
@@ -374,29 +394,43 @@ export function RestaurantProvider({ children }) {
   }, []);
 
   // Refresh orders from backend (used by MQTT callbacks)
+  // const refreshOrders = useCallback(async () => {
+  //   try {
+  //     const backendOrders = await orderAPI.getAllOrders();
+  //     const normalized = backendOrders.map(normalizeBackendOrder);
+      
+  //     // ✅ FIXED: Merge with existing orders to prevent loss of local state
+  //     // Only add orders from backend that don't already exist in state
+  //     const newOrders = normalized.filter(
+  //       backendOrder => !state.orderHistory.some(o => o.id === backendOrder.id)
+  //     );
+      
+  //     if (newOrders.length > 0) {
+  //       console.log(`📥 ${newOrders.length} new orders from backend`);
+  //       newOrders.forEach(o => {
+  //         dispatch({ type: 'PLACE_ORDER', payload: { order: o } });
+  //       });
+  //     } else {
+  //       console.log('✅ Orders already synced');
+  //     }
+  //   } catch (error) {
+  //     console.warn('[AURA] Failed to refresh orders:', error.message);
+  //   }
+  // }, [state.orderHistory]);
   const refreshOrders = useCallback(async () => {
-    try {
-      const backendOrders = await orderAPI.getAllOrders();
-      const normalized = backendOrders.map(normalizeBackendOrder);
-      
-      // ✅ FIXED: Merge with existing orders to prevent loss of local state
-      // Only add orders from backend that don't already exist in state
-      const newOrders = normalized.filter(
-        backendOrder => !state.orderHistory.some(o => o.id === backendOrder.id)
-      );
-      
-      if (newOrders.length > 0) {
-        console.log(`📥 ${newOrders.length} new orders from backend`);
-        newOrders.forEach(o => {
-          dispatch({ type: 'PLACE_ORDER', payload: { order: o } });
-        });
-      } else {
-        console.log('✅ Orders already synced');
-      }
-    } catch (error) {
-      console.warn('[AURA] Failed to refresh orders:', error.message);
-    }
-  }, [state.orderHistory]);
+  try {
+    const backendOrders = await orderAPI.getAllOrders();
+    const normalized = backendOrders.map(normalizeBackendOrder);
+    const existing = state.orderHistory;
+    const merged = normalized.map((incoming) => {
+      const old = existing.find(o => o.id === incoming.id);
+      return old?.isPaid ? { ...incoming, isPaid: true, paidAt: old.paidAt } : incoming;
+    });
+    dispatch({ type: 'SET_ORDERS', payload: { orderHistory: merged } });
+  } catch (error) {
+    console.warn('[AURA] Failed to refresh orders:', error.message);
+  }
+}, [state.orderHistory]);
 
   const markTablePaid = useCallback(async (tableNumber) => {
     try {

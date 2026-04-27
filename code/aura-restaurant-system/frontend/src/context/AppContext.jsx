@@ -338,6 +338,40 @@ const login = useCallback(async (username, password) => {
     return !!(cred && cred.password === password);
   }, []);
 
+  // ── New Customer Session ─────────────────────────────────────────────────
+// Stores sets of order IDs to hide per table — avoids clock skew issues
+const [hiddenOrderIds, setHiddenOrderIds] = useState(() => {
+  try {
+    const stored = localStorage.getItem('aura_hidden_order_ids');
+    return stored ? JSON.parse(stored) : {};
+  } catch {
+    return {};
+  }
+});
+
+useEffect(() => {
+  try {
+    localStorage.setItem('aura_hidden_order_ids', JSON.stringify(hiddenOrderIds));
+  } catch {}
+}, [hiddenOrderIds]);
+
+// Pass the current visible order IDs to hide them for the next customer
+const startNewCustomer = useCallback((tableNumber, currentOrderIds = []) => {
+  if (!tableNumber) return false;
+  setHiddenOrderIds((prev) => {
+    const existing = Array.isArray(prev[tableNumber]) ? prev[tableNumber] : [];
+    return {
+      ...prev,
+      [tableNumber]: [...new Set([...existing, ...currentOrderIds])],
+    };
+  });
+  return true;
+}, []);
+
+const getHiddenOrderIds = useCallback((tableNumber) => {
+  return new Set(hiddenOrderIds[tableNumber] || []);
+}, [hiddenOrderIds]);
+
   // ── Logout ────────────────────────────────────────────────────────────────
   const logout = useCallback(async () => {
     try {
@@ -402,6 +436,8 @@ const login = useCallback(async (username, password) => {
     login, logout, verifyCredentials,
     theme, toggleTheme,
     menuItems, addMenuItem, deleteMenuItem, refreshMenu,
+    // New Customer session management
+    startNewCustomer, getHiddenOrderIds,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

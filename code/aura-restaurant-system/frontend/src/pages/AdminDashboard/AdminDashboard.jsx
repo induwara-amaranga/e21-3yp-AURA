@@ -55,6 +55,7 @@ export default function AdminDashboard() {
     orderHistory,
     getConfirmedRevenue,
     getPendingOrderTotal,
+    refreshOrders
   } = useRestaurant();
   const isAdmin = session?.role === 'admin';
 
@@ -69,46 +70,56 @@ export default function AdminDashboard() {
   const [robotFleet, setRobotFleet] = useState(ROBOTS_DATA);
 
   // Subscribe to menu updates and real-time stats from MQTT
-  useEffect(() => {
-    orderMqtt.connect();
+useEffect(() => {
+  orderMqtt.connect();
 
-    // Menu updates
-    const unsubMenu = orderMqtt.onMenuUpdate((data) => {
-      console.log('🍽️ Menu update received:', data);
-      refreshMenu();
-    });
+  const unsubMenu = orderMqtt.onMenuUpdate((data) => {
+    console.log('🍽️ Menu update received:', data);
+    refreshMenu();
+  });
 
-    // Dashboard stats updates (revenue, active orders, pending total)
-    const unsubStats = orderMqtt.onDashboardStats((data) => {
-      console.log('📊 Dashboard stats update received:', data);
+  const unsubStats = orderMqtt.onDashboardStats((data) => {
+    console.log('📊 Dashboard stats update received:', data);
+    setRealtimeStats((prev) => ({
+      ...prev,
+      confirmedRevenue: data.confirmedRevenue ?? prev.confirmedRevenue,
+      activeOrderCount: data.activeOrderCount ?? prev.activeOrderCount,
+      pendingTotal: data.pendingTotal ?? prev.pendingTotal,
+    }));
+  });
+
+  const unsubRobots = orderMqtt.onRobotFleetUpdate((data) => {
+    console.log('🤖 Robot fleet update received:', data);
+    if (data.robots && Array.isArray(data.robots)) {
+      setRobotFleet(data.robots);
+      const activeCount = data.robots.filter((r) => r.status !== 'charging').length;
       setRealtimeStats((prev) => ({
         ...prev,
-        confirmedRevenue: data.confirmedRevenue ?? prev.confirmedRevenue,
-        activeOrderCount: data.activeOrderCount ?? prev.activeOrderCount,
-        pendingTotal: data.pendingTotal ?? prev.pendingTotal,
+        robotsOnline: activeCount,
+        robotsTotal: data.robots.length,
       }));
-    });
+    }
+  });
 
-    // Robot fleet updates
-    const unsubRobots = orderMqtt.onRobotFleetUpdate((data) => {
-      console.log('🤖 Robot fleet update received:', data);
-      if (data.robots && Array.isArray(data.robots)) {
-        setRobotFleet(data.robots);
-        const activeCount = data.robots.filter((r) => r.status !== 'charging').length;
-        setRealtimeStats((prev) => ({
-          ...prev,
-          robotsOnline: activeCount,
-          robotsTotal: data.robots.length,
-        }));
-      }
-    });
+  // ← add these two
+  const unsubNewOrder = orderMqtt.onNewOrder(async (data) => {
+    console.log('🔔 New order received on admin dashboard:', data);
+    await refreshOrders();
+  });
 
-    return () => {
-      unsubMenu();
-      unsubStats();
-      unsubRobots();
-    };
-  }, [refreshMenu]);
+  const unsubStatusUpdate = orderMqtt.onOrderStatusUpdate(async (data) => {
+    console.log('🔄 Order status update on admin dashboard:', data);
+    await refreshOrders();
+  });
+
+  return () => {
+    unsubMenu();
+    unsubStats();
+    unsubRobots();
+    unsubNewOrder();       // ← cleanup
+    unsubStatusUpdate();   // ← cleanup
+  };
+}, [refreshMenu, refreshOrders]);  // ← add refreshOrders to deps
 
   // [API ENDPOINT]: GET /api/v1/admin/revenue?status=PAID
   // [DATA SYNC]: Revenue is derived only from paid tickets so kitchen placements never inflate earnings.

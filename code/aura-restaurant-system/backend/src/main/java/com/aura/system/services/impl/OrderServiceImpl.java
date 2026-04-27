@@ -233,17 +233,30 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public void markTableAsPaid(Integer tableId) {
-        List<Order> unpaidOrders = orderRepository
-                .findUnpaidByTableId(tableId, "PAID");
+        List<Order> unpaidOrders = orderRepository.findUnpaidByTableId(tableId, "PAID");
 
         if (unpaidOrders.isEmpty()) {
             log.info("No unpaid orders found for table {}", tableId);
-            // throw new ResponseStatusException(
-            //         HttpStatus.SC_NOT_FOUND,
-            //         "No unpaid orders found for table " + tableId);
+            return;
         }
 
         unpaidOrders.forEach(order -> order.setStatus("PAID"));
         orderRepository.saveAll(unpaidOrders);
+
+        // Notify all clients via MQTT
+        try {
+            String topic = "aura/kitchen/update-order";
+            String payload = String.format(
+                "{\"tableId\":%d,\"status\":\"PAID\",\"orderCount\":%d}",
+                tableId, unpaidOrders.size()
+            );
+            mqttPublisher.publish(topic, payload);
+            log.info("Table {} marked as paid | {} orders updated", tableId, unpaidOrders.size());
+
+            // Refresh dashboard stats (revenue increases when table pays)
+            dashboardStatsService.publishDashboardStats();
+        } catch (Exception e) {
+            log.error("Failed to publish MQTT after marking table {} as paid: {}", tableId, e.getMessage());
+        }
     }
 }

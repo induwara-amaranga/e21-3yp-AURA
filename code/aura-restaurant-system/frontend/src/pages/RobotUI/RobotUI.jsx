@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { ChefHat, Flame, Leaf, IceCreamCone, Coffee, UtensilsCrossed, Plus, Minus, ShoppingBag, Send, CreditCard, Trash2, LogOut, Sun, Moon, Lock, X, Clock, Bike, Sparkles, PartyPopper, CheckCircle2, Loader2 } from 'lucide-react';
+import { ChefHat, Flame, Leaf, IceCreamCone, Coffee, UtensilsCrossed, Plus, Minus, ShoppingBag, Send, CreditCard, Trash2, LogOut, Sun, Moon, Lock, X, Clock, Bike, Sparkles, PartyPopper, CheckCircle2, Loader2, User } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { useRestaurant, ORDER_STATUS } from '../../context/RestaurantContext';
 import { getMenuImageSrc } from '../../utils/menuImages';
@@ -111,8 +111,10 @@ function PayModal({ total, table, dark, onSuccess, onClose }) {
 // MAIN COMPONENT
 // ─────────────────────────────────────────────────────────────────────────────
 export default function RobotUI() {
-  const { session, logout, verifyCredentials, menuItems, theme, toggleTheme, refreshMenu } = useAppContext();
+  const { session, logout, verifyCredentials, menuItems, theme, toggleTheme, refreshMenu, getCustomerSessionStart, startNewCustomer,getHiddenOrderIds } = useAppContext();
   const { placeOrder, getUnpaidOrders, getUnpaidTotal, getLatestOrder, markTablePaid } = useRestaurant();
+  const [ordering, setOrdering] = useState(false);
+  const [, forceUpdate] = useState(0);
 
   // Subscribe to menu updates from MQTT (synced from AdminDashboard)
   useEffect(() => {
@@ -124,9 +126,32 @@ export default function RobotUI() {
   
   const dark       = theme === 'dark';
   const table      = session?.tableNumber || 'T?';
-  const confirmed  = getUnpaidOrders(table);
-  const confTotal  = getUnpaidTotal(table);
-  const latest     = getLatestOrder(table);
+  // Remove:
+// const sessionStart = getCustomerSessionStart(table);
+// const allUnpaidOrders = getUnpaidOrders(table);
+// const confirmed = sessionStart ? allUnpaidOrders.filter(...) : allUnpaidOrders;
+
+// Replace with:
+//const { getHiddenOrderIds, startNewCustomer } = useAppContext();
+const allUnpaidOrders = getUnpaidOrders(table);
+const hiddenIds = getHiddenOrderIds(table);
+const confirmed = allUnpaidOrders.filter(order => !hiddenIds.has(order.id));
+  
+  // // Get session start time for this table - orders created before this are hidden
+  // const sessionStart = getCustomerSessionStart(table);
+  // const allUnpaidOrders = getUnpaidOrders(table);
+  
+  // // Filter: only show orders created at or after the session start time
+  // // If no session started, show all unpaid orders
+  // const confirmed = sessionStart
+  //   ? allUnpaidOrders.filter(order => {
+  //       const orderTime = new Date(order.createdAt).getTime();
+  //       return orderTime >= sessionStart;
+  //     })
+  //   : allUnpaidOrders;
+  
+  const confTotal  = confirmed.reduce((s, o) => s + o.total, 0);
+  const latest     = confirmed.length > 0 ? confirmed[confirmed.length - 1] : null;
   const status     = latest?.status || null;
   const sCfg       = status ? STATUS_CFG[status] : null;
   const delivered  = status === ORDER_STATUS.DELIVERED;
@@ -184,19 +209,24 @@ export default function RobotUI() {
   const hasActiveSession = confirmed.length > 0;
   const currentUpsell = recommendationItems.length ? recommendationItems[upsellIndex % recommendationItems.length] : null;
 
-  // 2. Updated Order Handler with WebSocket Integration
-  const placeOrderHandler = () => {
-    if (!draft.length) return;
-
-    // A. Original UI/Context Logic
-    //placeOrder(table, draft, hasActiveSession);
-
-    // B. WebSocket Logic: Send to Robot Controller
-    sendOrderToRobot(table, draft);
-
+  // 2. Order Handler - sends to backend AND robot
+  const placeOrderHandler = async () => {
+  if (!draft.length || ordering) return;
+  setOrdering(true);
+  try {
+    await sendOrderToRobot(
+      table,
+      draft,
+      () => placeOrder(table, draft, hasActiveSession),  // ← backend fn
+      () => setDraft([])                                  // ← on done
+    );
+  } catch (error) {
+    console.error('Failed to place order:', error);
     setDraft([]);
-  };
-
+  } finally {
+    setOrdering(false);
+  }
+};
   const paySuccess = async () => {
     if (draft.length > 0) {
       //placeOrder(table, draft, hasActiveSession);
@@ -332,7 +362,7 @@ export default function RobotUI() {
               <p className={`text-xs ${tc.st}`}>{delivered ? 'Need more? Add items & send add-on!' : `Grand Total: $${grand.toFixed(2)}`}</p>
             </div>
           </div>
-          {sCfg && (
+          {/* {sCfg && (
             <div className={`mt-3 flex items-center gap-3 px-4 py-3 rounded-2xl ring-1 ${sCfg.ring} ${sCfg.bg}`}>
               <sCfg.icon size={18} className={sCfg.color}/>
               <div className="flex-1">
@@ -346,7 +376,7 @@ export default function RobotUI() {
               </div>
               {!delivered && <Loader2 size={16} className="text-orange-400 animate-spin flex-shrink-0"/>}
             </div>
-          )}
+          )} */}
         </div>
 
         <div className="flex-1 overflow-y-auto">
@@ -361,7 +391,7 @@ export default function RobotUI() {
               <div className="px-4 pb-3 space-y-0.5">
                 {confirmed.map(order => (
                   <div key={order.id}>
-                    <p className={`text-[10px] font-mono px-1 py-1 ${tc.mc}`}>#{order.ticketNum}{order.isAddon ? ' · Add-on' : ''}</p>
+                    <p className={`text-[10px] font-mono px-1 py-1 ${tc.mc}`}>#{order.id}{order.isAddon ? ' · Add-on' : ''}</p>
                     {order.items.map((it, idx) => (
                       <div key={idx} className={`flex items-center gap-3 px-3 py-2 rounded-xl border mb-1 ${D ? 'bg-white/[0.03] border-white/5' : 'bg-white border-gray-100'}`}>
                         <img src={getMenuImageSrc(it.imageFilename)} alt={it.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
@@ -417,8 +447,16 @@ export default function RobotUI() {
               <span className="font-bold text-2xl text-orange-500">${grand.toFixed(2)}</span>
             </div>
           </div>
-          <button onClick={placeOrderHandler} disabled={!draft.length} className="w-full py-4 rounded-2xl font-bold text-base text-white bg-gradient-to-r from-orange-500 to-orange-600 shadow-lg shadow-orange-500/25 active:scale-95 disabled:opacity-30 transition-all flex items-center justify-center gap-3">
-            <Send size={18}/>{hasActiveSession ? `Send Add-on — ${table}` : `Place Order — ${table}`}
+          <button onClick={placeOrderHandler} disabled={!draft.length || ordering} className="w-full py-4 rounded-2xl font-bold text-base text-white bg-gradient-to-r from-orange-500 to-orange-600 shadow-lg shadow-orange-500/25 active:scale-95 disabled:opacity-30 transition-all flex items-center justify-center gap-3">
+            {ordering ? (
+              <>
+                <Loader2 size={18} className="animate-spin"/> Sending...
+              </>
+            ) : (
+              <>
+                <Send size={18}/>{hasActiveSession ? `Send Add-on — ${table}` : `Place Order — ${table}`}
+              </>
+            )}
           </button>
           <button onClick={() => setShowPay(true)} disabled={grand === 0} className={`w-full py-3.5 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 ${tc.btn2}`}>
             <CreditCard size={18}/>Pay & Close — ${grand.toFixed(2)}
@@ -436,6 +474,23 @@ export default function RobotUI() {
               </div>
             </div>
           )}
+
+          {/* ── New Customer Button ── */}
+          <button
+            onClick={() => {
+              const currentIds = confirmed.map(o => o.id);
+              startNewCustomer(table, currentIds);
+              setDraft([]);
+            }}
+            className="w-full py-3 rounded-2xl font-semibold text-sm text-white
+                      bg-gradient-to-r from-sky-500 to-sky-600
+                      hover:from-sky-400 hover:to-sky-500
+                      shadow-lg shadow-sky-500/20
+                      active:scale-95 transition-all duration-200 flex items-center justify-center gap-2"
+          >
+            <User size={16} />
+            New Customer — Clear Current Order
+          </button>
         </div>
       </div>
 
