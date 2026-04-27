@@ -57,6 +57,7 @@
 """
 
 import cv2
+import argparse
 import os
 import time
 import threading
@@ -66,6 +67,9 @@ from collections import deque
 from picamera2 import Picamera2
 from adafruit_servokit import ServoKit
 import logging
+import subprocess
+
+from hardware_config import PAN_CHANNEL, TILT_CHANNEL
 
 # ───────────────────────────────────────────────────────────────
 # LOGGING
@@ -86,9 +90,7 @@ FRAME_W    = 640
 FRAME_H    = 480
 FRAME_RATE = 30
 
-# Servo channels on PCA9685
-PAN_CHANNEL  = 0
-TILT_CHANNEL = 1
+# Servo channels on PCA9685 are shared through hardware_config.
 
 # Servo angle limits (degrees)
 PAN_MIN  = 30;   PAN_MAX  = 150
@@ -103,13 +105,13 @@ DEAD_ZONE_X = 30
 DEAD_ZONE_Y = 25
 
 # Proportional gain  (degrees per pixel of error)
-KP_PAN  = 0.06
-KP_TILT = 0.05
+KP_PAN  = 0.07
+KP_TILT = 0.06
 
 # Maximum servo target change per detection frame (degrees)
 # Keeps a single noisy detection from causing a big jump in target
-MAX_TARGET_STEP_PAN  = 8.0
-MAX_TARGET_STEP_TILT = 6.0
+MAX_TARGET_STEP_PAN  = 9.0
+MAX_TARGET_STEP_TILT = 7.0
 
 # Servo thread smoothing  ← THIS is what makes movement smooth
 # The servo thread runs at 25 Hz and blends current→target at this rate.
@@ -118,13 +120,14 @@ MAX_TARGET_STEP_TILT = 6.0
 SERVO_ALPHA = 0.12
 
 # Face position smoothing (on the detected pixel position, before control)
-FACE_POS_ALPHA = 0.50    # 0=lag/smooth  1=raw/responsive
+# Increase alpha to respond faster to movement but still smooth jitter.
+FACE_POS_ALPHA = 0.60    # 0=lag/smooth  1=raw/responsive
 
 # Face must be detected this many consecutive frames before tracking starts
-CONFIRM_FRAMES = 3
+CONFIRM_FRAMES = 2
 
 # Face must disappear this many frames before we stop tracking
-LOSE_FRAMES = 8
+LOSE_FRAMES = 6
 
 # Timing
 LOST_FACE_TIMEOUT = 2.5   # seconds before search mode starts
@@ -351,8 +354,11 @@ class FaceDetector:
 
 class RestaurantRobot:
 
-    def __init__(self):
+    def __init__(self, auto_stop_on_lock=False, max_run_seconds=0.0):
         self._stop_event = threading.Event()
+        self.auto_stop_on_lock = bool(auto_stop_on_lock)
+        self.max_run_seconds = max(0.0, float(max_run_seconds))
+        self._run_started_at = time.time()
 
         # ── Camera ──────────────────────────────────────────────
         log.info("Starting Picamera2 ...")
@@ -409,8 +415,46 @@ class RestaurantRobot:
             cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
             cv2.resizeWindow(WINDOW_NAME, WIN_W, WIN_H)
             cv2.moveWindow(WINDOW_NAME, 0, 0)
+            # Try to place the tracker window behind other windows if possible.
+            try:
+                # Prefer wmctrl; fallback to xdotool if available.
+                def _lower_window():
+                    try:
+                        subprocess.run(["wmctrl", "-r", WINDOW_NAME, "-b", "add,below"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        return True
+                    except Exception:
+                        pass
+                    try:
+                        # xdotool: search by name then lower
+                        proc = subprocess.run(["xdotool", "search", "--name", WINDOW_NAME], capture_output=True, text=True)
+                        if proc.returncode == 0 and proc.stdout.strip():
+                            wid = proc.stdout.strip().splitlines()[0]
+                            subprocess.run(["xdotool", "windowlower", wid], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                            return True
+                    except Exception:
+                        pass
+                    return False
+
+                _lower_window()
+            except Exception:
+                pass
 
         log.info("All systems ready.  Press Q / Esc to quit.")
+
+    def _should_auto_stop(self):
+        now = time.time()
+        if self.max_run_seconds > 0 and (now - self._run_started_at) >= self.max_run_seconds:
+            log.info("Max run time reached (%.1fs).", self.max_run_seconds)
+            return True
+
+        if self.auto_stop_on_lock:
+            with self._lock:
+                is_locked = self.frozen and self._current_face is not None
+            if is_locked:
+                log.info("Face lock achieved. Auto-stopping tracker cycle.")
+                return True
+
+        return False
 
     # ─────────────────────────────────────────────────────────────
     # THREAD 1 – capture: fills _frame_q as fast as camera allows
@@ -627,26 +671,34 @@ class RestaurantRobot:
 
             color = (0, 255, 80)  if frozen else (0, 165, 255)
             label = "LOCKED"      if frozen else "TRACKING"
-            t = 18
+
+            # Scale annotation sizes with face box size so visuals remain clear
+            scale = max(0.6, min(2.0, min(bw, bh) / 120.0))
+            tick = int(max(8, round(18 * scale)))
+            thickness = int(max(1, round(2 * scale)))
+            circle_r = int(max(4, round(min(bw, bh) / 6)))
 
             # Corner-tick bounding box
             segs = [
-                (fx,      fy,      fx+t,    fy     ), (fx,      fy,      fx,      fy+t   ),
-                (fx+bw,   fy,      fx+bw-t, fy     ), (fx+bw,   fy,      fx+bw,   fy+t   ),
-                (fx,      fy+bh,   fx+t,    fy+bh  ), (fx,      fy+bh,   fx,      fy+bh-t),
-                (fx+bw,   fy+bh,   fx+bw-t, fy+bh  ), (fx+bw,   fy+bh,   fx+bw,   fy+bh-t),
+                (fx,      fy,      fx+tick,    fy     ), (fx,      fy,      fx,      fy+tick   ),
+                (fx+bw,   fy,      fx+bw-tick, fy     ), (fx+bw,   fy,      fx+bw,   fy+tick   ),
+                (fx,      fy+bh,   fx+tick,    fy+bh  ), (fx,      fy+bh,   fx,      fy+bh-tick),
+                (fx+bw,   fy+bh,   fx+bw-tick, fy+bh  ), (fx+bw,   fy+bh,   fx+bw,   fy+bh-tick),
             ]
             for ax, ay, bx, by in segs:
-                cv2.line(frame, pt(ax, ay), pt(bx, by), color, 2, cv2.LINE_AA)
+                cv2.line(frame, pt(ax, ay), pt(bx, by), color, thickness, cv2.LINE_AA)
 
-            cv2.circle(frame, pt(fcx, fcy), 5, color, -1, cv2.LINE_AA)
-            cv2.line(frame, pt(cx_f, cy_f), pt(fcx, fcy), (70, 70, 70), 1, cv2.LINE_AA)
+            cv2.circle(frame, pt(fcx, fcy), circle_r, color, -1, cv2.LINE_AA)
+            cv2.line(frame, pt(cx_f, cy_f), pt(fcx, fcy), (70, 70, 70), max(1, thickness-1), cv2.LINE_AA)
 
-            (lw, lh), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 2)
+            # Label box scaled and positioned
+            font_scale = max(0.4, 0.55 * scale)
+            font_thickness = max(1, int(round(2 * scale)))
+            (lw, lh), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness)
             by0 = max(fy - 2, lh + 10)
             cv2.rectangle(frame, pt(fx, by0 - lh - 8), pt(fx + lw + 8, by0), color, -1)
             cv2.putText(frame, label, pt(fx + 4, by0 - 3),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 2, cv2.LINE_AA)
+                        cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), font_thickness, cv2.LINE_AA)
 
     # ─────────────────────────────────────────────────────────────
     # RUN – starts all threads, then pumps the display in main thread
@@ -662,6 +714,9 @@ class RestaurantRobot:
 
         try:
             while not self._stop_event.is_set():
+                if self._should_auto_stop():
+                    break
+
                 try:
                     frame = self._display_q.get(timeout=0.5)
                 except queue.Empty:
@@ -697,10 +752,8 @@ class RestaurantRobot:
         self._stop_event.set()
         time.sleep(0.3)   # let threads exit gracefully
 
-        # Now move servo to home (servo thread is gone, safe to call directly)
         try:
-            self.servo.go_home_immediate()
-            log.info("Servo returned to home.")
+            log.info("Servo left at last position.")
         except Exception as exc:
             log.warning("Servo home error: %s", exc)
 
@@ -716,6 +769,26 @@ class RestaurantRobot:
 
 
 # ═══════════════════════════════════════════════════════════════
+def parse_args():
+    parser = argparse.ArgumentParser(description="AURA face tracker")
+    parser.add_argument(
+        "--auto-stop-on-lock",
+        action="store_true",
+        help="Stop automatically when a stable face lock is achieved.",
+    )
+    parser.add_argument(
+        "--max-run-seconds",
+        type=float,
+        default=0.0,
+        help="Maximum runtime in seconds (0 disables timeout).",
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    robot = RestaurantRobot()
+    args = parse_args()
+    robot = RestaurantRobot(
+        auto_stop_on_lock=args.auto_stop_on_lock,
+        max_run_seconds=args.max_run_seconds,
+    )
     robot.run()
