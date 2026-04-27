@@ -1,30 +1,30 @@
 #.....................................................................................................................................................................
-import sys
-from unittest.mock import MagicMock
+# import sys
+# from unittest.mock import MagicMock
 
-# Windows වලදී RPi module එක Mock කිරීම
-try:
-    import RPi.GPIO
-except ImportError:
-    mock_rpi = MagicMock()
-    sys.modules["RPi"] = mock_rpi
-    sys.modules["RPi.GPIO"] = mock_rpi.GPIO
-    print("⚠️ Running in Mock Mode (No Hardware Detected)")
+# # Windows වලදී RPi module එක Mock කිරීම
+# try:
+#     import RPi.GPIO
+# except ImportError:
+#     mock_rpi = MagicMock()
+#     sys.modules["RPi"] = mock_rpi
+#     sys.modules["RPi.GPIO"] = mock_rpi.GPIO
+#     print("⚠️ Running in Mock Mode (No Hardware Detected)")
 
-# මීට අමතරව අනෙකුත් hardware modules වලට එන errors මගහැරීමට:
-sys.modules["oled_module"] = MagicMock()
-sys.modules["touch_module"] = MagicMock()
-sys.modules["stepper_module"] = MagicMock()
+# # මීට අමතරව අනෙකුත් hardware modules වලට එන errors මගහැරීමට:
+# sys.modules["oled_module"] = MagicMock()
+# sys.modules["touch_module"] = MagicMock()
+# sys.modules["stepper_module"] = MagicMock()
 
-try:
-    import RPi.GPIO as GPIO
-    from oled_module import OLEDModule
-    from touch_module import TouchModule
-    from stepper_module import StepperModule
-except ImportError:
-    # මේවා Mock කර ඇති නිසා දැනට හිස්ව තැබිය හැක
-    pass
-#.........................................................................................................................................................
+# try:
+#     import RPi.GPIO as GPIO
+#     from oled_module import OLEDModule
+#     from touch_module import TouchModule
+#     from stepper_module import StepperModule
+# except ImportError:
+#     # මේවා Mock කර ඇති නිසා දැනට හිස්ව තැබිය හැක
+#     pass
+# #.........................................................................................................................................................
 import os
 import time
 import threading
@@ -45,7 +45,7 @@ from config import USE_WAKE_WORD, WAKE_WORD
 load_dotenv()
 
 # Global GPIO Setup
-#GPIO.setmode(GPIO.BCM)
+GPIO.setmode(GPIO.BCM)
 
 # async def frontend_handler(websocket, path, mqtt_bot):
 #     print("Frontend UI connected via WebSocket.")
@@ -212,7 +212,7 @@ def main():
 
     # --- Threads ---
     threading.Thread(target=start_websocket_server, args=(mqtt_bot,), daemon=True).start()
-    #threading.Thread(target=_touch_worker, args=(touch, servo, oled, stop_event), daemon=True).start()
+    threading.Thread(target=_touch_worker, args=(touch, servo, oled, stop_event), daemon=True).start()
 
     print("AURA System Online. Listening for commands...")
     mqtt_bot.publish_status(battery=100, location="Dining Hall", state="ONLINE")
