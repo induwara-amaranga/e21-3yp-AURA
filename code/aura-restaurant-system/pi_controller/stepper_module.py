@@ -52,23 +52,11 @@ class StepperModule:
         override = self._parse_sensor_degrees(
             os.getenv("STEPPER_SENSOR_DEGREES", "")
         )
-        if override:
-            degrees_map = {**default_degrees, **override}
-            return {
-                sensor_id: self._degrees_to_steps(deg)
-                for sensor_id, deg in degrees_map.items()
-            }
+        degrees_map = {**default_degrees, **override}
 
-        quarter = self.steps_per_quarter_turn
-        base_steps = {
-            1: 0,
-            2: quarter,
-            3: quarter * 2,
-            4: quarter * 3,
-        }
         return {
-            sensor_id: self._apply_zero_offset(steps)
-            for sensor_id, steps in base_steps.items()
+            sensor_id: self._degrees_to_steps(deg)
+            for sensor_id, deg in degrees_map.items()
         }
 
     def _build_direction_map(self):
@@ -80,13 +68,8 @@ class StepperModule:
         }
 
     def _degrees_to_steps(self, degrees):
-        steps = float(degrees) * self.steps_per_degree
-        return self._apply_zero_offset(steps)
-
-    def _apply_zero_offset(self, steps):
-        return (
-            int(round(steps)) + self.zero_offset_steps
-        ) % self.steps_per_revolution
+        steps = int(round(float(degrees) * self.steps_per_degree))
+        return (steps + self.zero_offset_steps) % self.steps_per_revolution
 
     def _parse_sensor_degrees(self, mapping):
         parsed = {}

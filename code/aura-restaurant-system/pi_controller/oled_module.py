@@ -86,19 +86,13 @@ class OLEDModule:
         offset_x = [-2, 0, 2, 0][phase]
         offset_y = [0, 1, 0, -1][phase]
 
-        scale = 5
+        scale = 6 if len(label) == 2 else 5
         spacing = 1
         text_w, text_h = self._measure_text(label, scale, spacing)
         start_x = max(0, (128 - text_w) // 2 + offset_x)
         start_y = max(0, (64 - text_h) // 2 + offset_y)
 
         self._draw_big_text(draw, label, start_x, start_y, scale, spacing)
-
-        # Shimmer effect: add a faint second stroke and tiny sparkles
-        if phase in (1, 3):
-            self._draw_big_text(draw, label, start_x + 1, start_y, scale, spacing)
-            for x_pos, y_pos in ((14, 10), (112, 16), (20, 52), (108, 48)):
-                draw.ellipse((x_pos, y_pos, x_pos + 2, y_pos + 2), fill="white")
 
     def _draw_eyes(self, draw, state="open", direction="center"):
         center_x = 64
@@ -135,7 +129,10 @@ class OLEDModule:
         for index, device in enumerate(self.devices):
             with canvas(device) as draw:
                 if self.display_mode == "aura":
-                    label = "AURA"
+                    if total >= 2:
+                        label = "AU" if index == 0 else "RA"
+                    else:
+                        label = "AURA"
                     self._draw_aura(draw, label)
                 else:
                     state = "closed" if self.is_blinking else "open"
