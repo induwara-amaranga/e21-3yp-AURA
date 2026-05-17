@@ -8,7 +8,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 # if not GEMINI_API_KEY:
 #     raise ValueError("GEMINI_API_KEY is not set in environment variables")
 
-MQTT_BROKER = os.getenv("MQTT_BROKER", "localhost")
+MQTT_BROKER = os.getenv("MQTT_BROKER", "10.169.209.167")
 MQTT_PORT = int(os.getenv("MQTT_PORT", 1883))
 
 USE_WAKE_WORD = True
