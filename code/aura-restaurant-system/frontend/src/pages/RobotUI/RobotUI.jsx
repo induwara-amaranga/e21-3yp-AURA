@@ -136,7 +136,7 @@ export default function RobotUI() {
 const allUnpaidOrders = getUnpaidOrders(table);
 const hiddenIds = getHiddenOrderIds(table);
 const confirmed = allUnpaidOrders.filter(order => !hiddenIds.has(order.id));
-  
+console.log("-------------------",confirmed);
   // // Get session start time for this table - orders created before this are hidden
   // const sessionStart = getCustomerSessionStart(table);
   // const allUnpaidOrders = getUnpaidOrders(table);

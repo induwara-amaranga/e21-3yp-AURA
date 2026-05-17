@@ -19,7 +19,7 @@ function normalizeTableId(rawTableId) {
 export const connectToRobot = () => {
     // Raspberry Pi එකේ IP ලිපිනය මෙතනට ලබා දෙන්න.
     // උදා: 'ws://192.168.1.100:8765'
-    socket = new WebSocket('ws://localhost:8765');
+    socket = new WebSocket('ws://10.30.3.193:8765');
 
     socket.onopen = () => {
         console.log("Connected to AURA Robot Controller");

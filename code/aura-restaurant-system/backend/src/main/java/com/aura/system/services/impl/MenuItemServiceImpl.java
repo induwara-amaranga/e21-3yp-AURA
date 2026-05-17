@@ -71,9 +71,13 @@ public class MenuItemServiceImpl implements MenuItemService {
 
     @Override
     public MenuItem createMenuItem(MenuItem menuItem, MultipartFile file) {
-        if (file != null && !file.isEmpty()) {
+        try{if (file != null && !file.isEmpty()) {
             String imageUrl = imageService.uploadImage(file);
             menuItem.setImageUrl(imageUrl);
+        }}
+        catch(Exception e){
+            log.error("Image upload failed", e);
+            //throw new RuntimeException("Failed to upload image");
         }
 
         MenuItem saved = menuItemRepository.save(menuItem);

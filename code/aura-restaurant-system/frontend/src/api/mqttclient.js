@@ -19,7 +19,7 @@ class KitchenMqttService {
     if (this.connected) return;
 
     // WebSocket port 9001 — not TCP 1883
-    this.client = mqtt.connect('ws://localhost:9001', {
+    this.client = mqtt.connect('ws://10.30.3.193:9001', {
       reconnectPeriod: 5000,
       connectTimeout: 10000,
     });

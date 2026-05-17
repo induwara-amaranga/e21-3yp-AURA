@@ -92,8 +92,15 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of(
+                "http://localhost:8080",
                 "http://localhost:5173",
-                "http://localhost:3000"
+                "http://10.169.209.167:5173",
+                "http://10.169.209.167:8080",
+                "http://10.109.199.167:5173",
+                "http://10.109.199.167:8080",
+                "http://10.30.3.193:8080",
+                "http://10.30.3.193:5173"
+
         ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With"));

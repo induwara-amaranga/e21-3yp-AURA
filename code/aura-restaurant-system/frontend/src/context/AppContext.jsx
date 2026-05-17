@@ -35,15 +35,16 @@ function loadInitialMenuItems() {
 
 function normalizeMenuItem(raw) {
   return {
-    id: raw.id || raw.menuItemId,
+    id: raw.menuItemId || raw.id,
     name: raw.name,
     description: raw.description || '',
     price: Number(raw.price) || 0,
     category: raw.category || 'popular',
-    imageFilename: raw.imageUrl || raw.imageFilename || DEFAULT_MENU_IMAGE_FILENAME,
-    time: raw.prepTime || raw.time || '15 min',
+    imageFilename: raw.imageUrl || raw.imageFilename || raw.menuItemImageUrl || DEFAULT_MENU_IMAGE_FILENAME,
+    time: raw.prepTimeMinutes || raw.time || '15 min',
     rating: raw.rating || 0,
     available: raw.available ?? raw.availability ?? true,
+    startTime: raw.orderTime || null,
   };
 }
 
@@ -384,13 +385,14 @@ const getHiddenOrderIds = useCallback((tableNumber) => {
   }, []);
 
   // ── Add Menu Item (Admin only) ────────────────────────────────────────────
-  const addMenuItem = useCallback(async (newItem) => {
+  const addMenuItem = useCallback(async (newItem, imageFile = null) => {
     const itemPayload = {
       name: newItem.name.trim(),
       description: (newItem.description || '').trim() || 'Freshly prepared signature dish from AURA kitchen.',
       price: Number(newItem.price) || 0,
       category: newItem.category || 'popular',
       availability: true,
+      // If using preset image, pass the filename; if uploading, let backend handle the file
       imageUrl: newItem.imageFilename && !isKnownMenuImage(newItem.imageFilename)
         ? newItem.imageFilename
         : undefined,
@@ -398,7 +400,8 @@ const getHiddenOrderIds = useCallback((tableNumber) => {
     };
 
     try {
-      const rawItem = await menuAPI.createMenuItem(itemPayload, null);
+      // Pass the image file to the API (can be null for preset images)
+      const rawItem = await menuAPI.createMenuItem(itemPayload, imageFile);
       const itemWithId = normalizeMenuItem(rawItem);
       setMenuItems((prev) => [...prev, itemWithId]);
       return itemWithId;

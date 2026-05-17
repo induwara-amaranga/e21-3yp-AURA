@@ -207,6 +207,7 @@ public class OrderServiceImpl implements OrderService {
                         .quantity(item.getQuantity())
                         .customization(item.getCustomization())
                         .subtotal(item.getSubtotal())
+                        .menuItemImageUrl(item.getMenuItem().getImageUrl())
                         .build())
                 .collect(Collectors.toList());
 

@@ -10,6 +10,7 @@ public class OrderItemResponse {
     private Integer menuItemId;
     private String  menuItemName;
     private Integer quantity;
-    private String  customization;
+    private String  customization; 
+    private String menuItemImageUrl;
     private Float   subtotal;
 }

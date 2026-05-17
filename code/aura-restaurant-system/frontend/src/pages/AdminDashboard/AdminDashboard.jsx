@@ -134,6 +134,9 @@ useEffect(() => {
 
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'menu'
 
+  // ── Image mode: 'preset' = predefined images, 'upload' = upload new ────────
+  const [imageMode, setImageMode] = useState('preset'); // 'preset' | 'upload'
+
   // ── Manage Menu form state ────────────────────────────────────────────────
   const [form, setForm] = useState({
     name: '',
@@ -141,6 +144,7 @@ useEffect(() => {
     price: '',
     category: 'popular',
     imageFilename: AVAILABLE_MENU_IMAGES[0] || '',
+    imageFile: null, // For file upload
     time: '15 min',
   });
   const [formError, setFormError]   = useState('');
@@ -173,7 +177,13 @@ useEffect(() => {
     },
   ];
 
-  const recentOrders = [...orderHistory].slice(-6).reverse();
+  let recentOrders = [...orderHistory].slice(-6).reverse();
+
+// After — shows both active and historical, newest first
+ recentOrders = [...activeOrders, ...orderHistory]
+  .filter((o, idx, arr) => arr.findIndex(x => x.id === o.id) === idx) // dedupe
+  .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+  .slice(0, 6);
 
   // [API ENDPOINT]: POST /api/v1/menu
   // [DATA SYNC]: Adds menu entries into shared context so Robot and Admin views render the same catalog immediately.
@@ -187,17 +197,31 @@ useEffect(() => {
     if (!form.description.trim()) return setFormError('Please add a short food description.');
     const price = parseFloat(form.price);
     if (isNaN(price) || price <= 0) return setFormError('Enter a valid price greater than 0.');
-    if (!form.imageFilename || !isKnownMenuImage(form.imageFilename)) {
-      return setFormError('Select a valid menu image from assets/food_images.');
+    
+    // Validate image: either preset image or uploaded file
+    if (imageMode === 'preset') {
+      if (!form.imageFilename || !isKnownMenuImage(form.imageFilename)) {
+        return setFormError('Select a valid menu image from assets/food_images.');
+      }
+    } else if (imageMode === 'upload') {
+      if (!form.imageFile) {
+        return setFormError('Please upload an image file.');
+      }
     }
 
     try {
-      await addMenuItem({
+      // Pass either uploaded file or preset image filename
+      const itemData = {
         ...form,
         name: form.name.trim(),
         description: form.description.trim(),
         price,
-      });
+      };
+      
+      // If uploading a new image, pass the file; otherwise pass null for file
+      const imageFile = imageMode === 'upload' ? form.imageFile : null;
+      
+      await addMenuItem(itemData, imageFile);
       setFormSuccess(`"${form.name}" added to the menu! It's now visible on RobotUI.`);
       setForm({
         name: '',
@@ -205,8 +229,10 @@ useEffect(() => {
         price: '',
         category: 'popular',
         imageFilename: AVAILABLE_MENU_IMAGES[0] || '',
+        imageFile: null,
         time: '15 min',
       });
+      setImageMode('preset'); // Reset to preset mode
       setTimeout(() => setFormSuccess(''), 4000);
     } catch (error) {
       setFormError(error.response?.data?.message || error.response?.data || 'Failed to add menu item. Try again.');
@@ -521,34 +547,99 @@ useEffect(() => {
                     />
                   </div>
 
-                  {/* Image picker */}
-                  {/* [BACKEND INTEGRATION: TODO] - POST /api/v1/menu/upload-image
-                      Replace this local selector with upload input that stores Cloudinary imageUrl + imagePublicId. */}
+                  {/* Image picker - Two options: Predefined or Upload */}
                   <div>
                     <label className="block text-sm font-medium text-dark-300 mb-1.5">
                       Image <span className="text-red-400">*</span>
                     </label>
-                    <select
-                      id="menu-form-image"
-                      value={form.imageFilename}
-                      onChange={(e) => setForm({ ...form, imageFilename: e.target.value })}
-                      disabled={!isAdmin}
-                      className="w-full bg-dark-800 border border-dark-600 rounded-xl px-4 py-3
-                                 text-white text-sm focus:outline-none focus:border-aura-500
-                                 focus:ring-2 focus:ring-aura-500/20 transition-all"
-                    >
-                      {AVAILABLE_MENU_IMAGES.map((imageName) => (
-                        <option key={imageName} value={imageName}>{imageName}</option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-dark-500 mt-2 truncate">Selected: {form.imageFilename}</p>
-                    <div className="mt-3 overflow-hidden rounded-xl border border-dark-600 bg-dark-800">
-                      <img
-                        src={getMenuImageSrc(form.imageFilename)}
-                        alt={form.name || 'Selected menu preview'}
-                        className="w-full h-36 object-cover"
-                      />
+                    
+                    {/* Option toggle */}
+                    <div className="flex gap-2 mb-3">
+                      <button
+                        type="button"
+                        onClick={() => setImageMode('preset')}
+                        className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                          imageMode === 'preset' 
+                            ? 'bg-aura-600 text-white' 
+                            : 'bg-dark-700 text-dark-400 hover:bg-dark-600'
+                        }`}
+                      >
+                        📷 Choose Preset
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setImageMode('upload')}
+                        className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                          imageMode === 'upload' 
+                            ? 'bg-aura-600 text-white' 
+                            : 'bg-dark-700 text-dark-400 hover:bg-dark-600'
+                        }`}
+                      >
+                        📤 Upload New
+                      </button>
                     </div>
+
+                    {/* Preset image selector */}
+                    {imageMode === 'preset' && (
+                      <>
+                        <select
+                          id="menu-form-image"
+                          value={form.imageFilename}
+                          onChange={(e) => setForm({ ...form, imageFilename: e.target.value })}
+                          disabled={!isAdmin}
+                          className="w-full bg-dark-800 border border-dark-600 rounded-xl px-4 py-3
+                                     text-white text-sm focus:outline-none focus:border-aura-500
+                                     focus:ring-2 focus:ring-aura-500/20 transition-all"
+                        >
+                          {AVAILABLE_MENU_IMAGES.map((imageName) => (
+                            <option key={imageName} value={imageName}>{imageName}</option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-dark-500 mt-2 truncate">Selected: {form.imageFilename}</p>
+                        <div className="mt-3 overflow-hidden rounded-xl border border-dark-600 bg-dark-800">
+                          <img
+                            src={getMenuImageSrc(form.imageFilename)}
+                            alt={form.name || 'Selected menu preview'}
+                            className="w-full h-36 object-cover"
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {/* File upload input */}
+                    {imageMode === 'upload' && (
+                      <>
+                        <input
+                          type="file"
+                          id="menu-form-image-upload"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files[0];
+                            if (file) {
+                              setForm({ ...form, imageFile: file });
+                            }
+                          }}
+                          disabled={!isAdmin}
+                          className="w-full bg-dark-800 border border-dark-600 rounded-xl px-4 py-3
+                                     text-white text-sm file:mr-4 file:py-2 file:px-4
+                                     file:rounded-lg file:border-0 file:bg-aura-600 file:text-white
+                                     file:cursor-pointer file:transition-all hover:file:bg-aura-500
+                                     focus:outline-none focus:border-aura-500 focus:ring-2 focus:ring-aura-500/20"
+                        />
+                        {form.imageFile && (
+                          <div className="mt-3 overflow-hidden rounded-xl border border-dark-600 bg-dark-800">
+                            <img
+                              src={URL.createObjectURL(form.imageFile)}
+                              alt="Uploaded preview"
+                              className="w-full h-36 object-cover"
+                            />
+                          </div>
+                        )}
+                        <p className="text-xs text-dark-500 mt-2">
+                          Uploaded: {form.imageFile?.name || 'No file selected'}
+                        </p>
+                      </>
+                    )}
                   </div>
 
                   {/* Error / success */}

@@ -29,7 +29,9 @@ export function formatDate(isoString) {
 }
 
 export function getTimeSince(isoString) {
-    const seconds = Math.floor((new Date() - new Date(isoString)) / 1000);
+    const seconds = Math.floor((new Date() - new Date(isoString).getTime()) / 1000);
+    console.log('Time since', isoString, 'is', seconds, 'seconds', 'now is', new Date());
+    if(seconds < 0) return 'just now';
     if (seconds < 60) return `${seconds}s ago`;
     const minutes = Math.floor(seconds / 60);
     if (minutes < 60) return `${minutes}m ago`;

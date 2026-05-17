@@ -115,7 +115,7 @@ function normalizeBackendOrder(raw) {
       name: item.menuItemName,
       quantity: item.quantity,
       price: item.subtotal && item.quantity ? item.subtotal / item.quantity : 0,
-      imageFilename: item.imageUrl || '',
+      imageFilename: item.imageUrl || item.menuItemImageUrl || '',
       customization: item.customization || '',
     })),
     status: raw.status,

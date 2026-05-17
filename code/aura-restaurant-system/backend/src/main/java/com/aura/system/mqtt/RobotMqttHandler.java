@@ -59,6 +59,7 @@ public class RobotMqttHandler {
             } else if (topic.matches("aura/kitchen/\\d+/order") || topic.matches("aura/table/\\d+/order")) {
                 String tableId = topic.split("/")[2];
                 responseTopic = "aura/table/" + tableId + "/order/response";
+                log.warn("=========================================");
                 handlePlaceOrder(tableId, payload, responseTopic);
 
             } else if (topic.matches("aura/table/\\d+/payment")) {

@@ -215,7 +215,7 @@ export default function KitchenDisplay() {
                             {order.tableNumber}
                           </div>
                           <div>
-                            <p className="text-xs font-mono text-gray-400 leading-tight">#{order.ticketNum}</p>
+                            <p className="text-xs font-mono text-gray-400 leading-tight">#{order.id}</p>
                             {order.isAddon && (
                               <span className="text-[10px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded font-semibold">ADD-ON</span>
                             )}
@@ -224,7 +224,7 @@ export default function KitchenDisplay() {
                         <div className="flex items-center gap-2">
                           {urgent && <Flame size={14} className="text-red-400 animate-pulse" title="Urgent"/>}
                           <span className="text-xs text-gray-500 flex items-center gap-1">
-                            <Clock size={11}/>{getTimeSince(order.createdAt)}
+                            <Clock size={11}/>{getTimeSince(order.startTime || order.createdAt)}
                           </span>
                         </div>
                       </div>
@@ -234,7 +234,7 @@ export default function KitchenDisplay() {
                         {order.items.map((item, idx) => (
                           <div key={idx} className="flex items-center gap-2 text-sm">
                             <img
-                              src={getMenuImageSrc(item.imageFilename)}
+                              src={getMenuImageSrc(item.MenuImageUrl || item.imageFilename || item.menuItemImageUrl)}
                               alt={item.name}
                               className="w-8 h-8 rounded-lg object-cover border border-white/10"
                             />

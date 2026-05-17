@@ -31,7 +31,7 @@ public class KitchenOrderNotifier {
         String topic = (String) message.getHeaders().get(MqttHeaders.RECEIVED_TOPIC);
         String payload = message.getPayload();
 
-        log.info("KitchenOrderNotifier received | topic: {}", topic);
+        log.info("======================📦KitchenOrderNotifier received | topic: {}", topic);
 
         if (topic == null || payload == null) {
             return;
